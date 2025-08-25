@@ -17,19 +17,6 @@ import (
 
 // --- Schemas ---
 
-var envelopeSchema = `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "schemaVersion": { "type": "string" },
-    "messageType": { "type": "string" },
-    "messageVersion": { "type": "string" },
-    "message": { "type": "object" },
-    "metadata": { "type": "object" }
-  },
-  "required": ["schemaVersion", "messageType", "messageVersion", "message", "metadata"]
-}`
-
 var userProfileSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
@@ -112,7 +99,7 @@ func main() {
 	sqsClient := sqs.NewFromConfig(cfg)
 
 	// --- 3. Setup Router and Register Handlers ---
-	router, err := sqsrouter.NewRouter(envelopeSchema)
+	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize router: %v", err)
 	}

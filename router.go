@@ -1,4 +1,4 @@
-package main
+package sqsrouter
 
 import (
 	"context"
@@ -205,7 +205,7 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 // --- Schemas ---
 // Schemas are defined as variables for clarity and separation.
 
-var envelopeSchema = `{
+var EnvelopeSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {

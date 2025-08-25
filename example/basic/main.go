@@ -12,10 +12,24 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/hatsunemiku3939/sqsrouter"
 )
 
+// --- Schemas ---
+
+var userProfileSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "userId": { "type": "string" },
+    "username": { "type": "string" },
+    "email": { "type": "string", "format": "email" }
+  },
+  "required": ["userId", "username", "email"]
+}`
+
+
 // --- Constants for Message Types and Versions ---
-// Using constants for message types and versions prevents typos and improves maintainability.
 const (
 	MsgTypeUpdateUserProfile = "updateUserProfile"
 	MsgVersion1_0            = "1.0"
@@ -30,26 +44,15 @@ type UserProfileMessage struct {
 	Email    string `json:"email"`
 }
 
-var userProfileSchema = `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "userId": { "type": "string" },
-    "username": { "type": "string" },
-    "email": { "type": "string", "format": "email" }
-  },
-  "required": ["userId", "username", "email"]
-}`
-
 // --- Message Handlers ---
 
 // UpdateUserProfileV1Handler handles the logic for updating a user profile.
-func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult {
+func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadataJSON []byte) sqsrouter.HandlerResult {
 	var msg UserProfileMessage
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
 		// This error should theoretically not happen if schema validation is correct.
 		// But as a safeguard, we handle it as a permanent failure.
-		return HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal user profile message: %w", err)}
+		return sqsrouter.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal user profile message: %w", err)}
 	}
 
 	// In a real application, this is where you would interact with a database or another service.
@@ -60,11 +63,11 @@ func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadat
 	case <-time.After(2 * time.Second): // Simulate 2 seconds of work.
 		log.Printf("INFO: Finished processing for user %s", msg.UserID)
 		// For this example, we assume the operation always succeeds.
-		return HandlerResult{ShouldDelete: true, Error: nil}
+		return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
 	case <-ctx.Done(): // This case will be hit if the processingTimeout is exceeded.
 		log.Printf("WARN: Processing canceled for user %s: %v", msg.UserID, ctx.Err())
 		// Return ShouldDelete: false to allow for a retry.
-		return HandlerResult{ShouldDelete: false, Error: ctx.Err()}
+		return sqsrouter.HandlerResult{ShouldDelete: false, Error: ctx.Err()}
 	}
 }
 
@@ -96,7 +99,7 @@ func main() {
 	sqsClient := sqs.NewFromConfig(cfg)
 
 	// --- 3. Setup Router and Register Handlers ---
-	router, err := NewRouter(envelopeSchema)
+	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 	if err != nil {
 		log.Fatalf("FATAL: Could not initialize router: %v", err)
 	}
@@ -107,7 +110,7 @@ func main() {
 	}
 
 	// --- 4. Setup and Start the Consumer ---
-	consumer := NewConsumer(sqsClient, queueURL, router)
+	consumer := sqsrouter.NewConsumer(sqsClient, queueURL, router)
 	consumer.Start(appCtx)
 
 	log.Println("Application has shut down.")

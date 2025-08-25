@@ -1,4 +1,4 @@
-package main
+package sqsrouter
 
 import (
 	"context"

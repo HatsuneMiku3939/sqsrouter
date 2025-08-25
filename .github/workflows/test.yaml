@@ -1,0 +1,96 @@
+---
+name: Test
+
+env:
+  GOVERSION: '1.24'
+  DIRENV_FILE: '.envrc'
+
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches-ignore: []
+
+jobs:
+  gomod:
+    name: Resolve go module dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GOVERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Export Environment Variables
+        uses: HatsuneMiku3939/direnv-action@v1
+
+      - name: Download go module
+        run: go mod download
+
+  test:
+    name: Unit Testing
+    runs-on: ubuntu-latest
+    needs:
+      - gomod
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GOVERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Export Environment Variables
+        uses: HatsuneMiku3939/direnv-action@v1
+
+      - name: Test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: make test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs:
+      - gomod
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GOVERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Export Environment Variables
+        uses: HatsuneMiku3939/direnv-action@v1
+
+      - name: Lint
+        run: make lint

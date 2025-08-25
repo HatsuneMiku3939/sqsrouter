@@ -23,6 +23,8 @@ const (
 	// processingTimeout sets a deadline for processing a single message.
 	// This should be less than the container's graceful shutdown period (e.g., terminationGracePeriodSeconds in K8s).
 	processingTimeout = 30 * time.Second
+	// retrySleep defines the duration to wait before retrying after a failed SQS API call.
+	retrySleep = 2 * time.Second
 )
 
 // SQSClient defines the interface for SQS operations needed by the Consumer.
@@ -72,7 +74,7 @@ func (c *Consumer) Start(ctx context.Context) {
 				break // Exit the loop cleanly.
 			}
 			log.Printf("ERROR: Failed to receive messages: %v. Retrying...", err)
-			time.Sleep(2 * time.Second) // Wait before retrying on other errors.
+			time.Sleep(retrySleep) // Wait before retrying on other errors.
 			continue
 		}
 
@@ -84,7 +86,7 @@ func (c *Consumer) Start(ctx context.Context) {
 
 		for _, msg := range output.Messages {
 			wg.Add(1)
-			go func(m types.Message) {
+			go func(m types.Message) { //nolint:contextcheck
 				defer wg.Done()
 				msgCtx, cancelMsg := context.WithTimeout(context.Background(), processingTimeout)
 				defer cancelMsg()
@@ -128,6 +130,7 @@ func (c *Consumer) processMessage(ctx context.Context, msg *types.Message) {
 		deleteCtx, cancelDelete := context.WithTimeout(context.Background(), deleteTimeout)
 		defer cancelDelete()
 
+		//nolint:contextcheck
 		_, err := c.client.DeleteMessage(deleteCtx, &sqs.DeleteMessageInput{
 			QueueUrl:      aws.String(c.queueURL),
 			ReceiptHandle: msg.ReceiptHandle,

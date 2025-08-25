@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export PATH="$PATH:$(go env GOPATH)/bin"
+
 GOLANGCI_LINT_VERSION="v2.0.2"
 
 function ensure_golangci_lint() {

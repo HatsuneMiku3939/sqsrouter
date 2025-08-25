@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+GOLANGCI_LINT_VERSION="v2.0.2"
+
+function ensure_golangci_lint() {
+	if ! command -v golangci-lint &> /dev/null; then
+		echo "golangci-lint could not be found. Installing..."
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh  | sh -s -- -b $(go env GOPATH)/bin $GOLANGCI_LINT_VERSION
+	fi
+}
+
+ensure_golangci_lint
+GOLANGCI_LINT_OPTIONS="--timeout 10m"
+
+while getopts "c:" opt; do
+	case ${opt} in
+	c)
+		GOLANGCI_LINT_OPTIONS="$GOLANGCI_LINT_OPTIONS -c $OPTARG"
+		;;
+	esac
+done
+
+golangci-lint run $GOLANGCI_LINT_OPTIONS
+LINT_RESULT=$?
+
+if [ $LINT_RESULT -ne 0 ]; then
+	echo "Linting failed"
+	exit 1
+fi
+
+echo "Linting passed"

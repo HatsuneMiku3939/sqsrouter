@@ -157,4 +157,4 @@ Issues and PRs are welcome.
 MIT. See LICENSE.
 
 ## Acknowledgments
-Originally written and maintained by contributors and Devin, with updates from the core team.
+Originally written and maintained by contributors and Devin, with updates from the core team. Initial development supported by Google Gemini.

@@ -15,3 +15,8 @@ test:
 .PHONY: lint
 lint:
 	@./scripts/lint -c .golangci.yml
+
+## e2e-test: Run end-to-end tests
+.PHONY: e2e-test
+e2e-test:
+	@./test/e2e.sh

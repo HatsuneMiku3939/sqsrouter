@@ -28,7 +28,6 @@ var userProfileSchema = `{
   "required": ["userId", "username", "email"]
 }`
 
-
 // --- Constants for Message Types and Versions ---
 const (
 	MsgTypeUpdateUserProfile = "updateUserProfile"

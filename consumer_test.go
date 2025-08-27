@@ -73,26 +73,34 @@ func TestConsumer_processMessage(t *testing.T) {
 		expectedDeleteErrMsg string
 	}{
 		{
-			name:             "success, should delete",
-			handler:          func(ctx context.Context, msg []byte, meta []byte) HandlerResult { return HandlerResult{ShouldDelete: true, Error: nil} },
+			name: "success, should delete",
+			handler: func(ctx context.Context, msg []byte, meta []byte) HandlerResult {
+				return HandlerResult{ShouldDelete: true, Error: nil}
+			},
 			shouldDelete:     true,
 			expectDeleteCall: true,
 		},
 		{
-			name:             "handler error, but should delete",
-			handler:          func(ctx context.Context, msg []byte, meta []byte) HandlerResult { return HandlerResult{ShouldDelete: true, Error: errors.New("permanent failure")} },
+			name: "handler error, but should delete",
+			handler: func(ctx context.Context, msg []byte, meta []byte) HandlerResult {
+				return HandlerResult{ShouldDelete: true, Error: errors.New("permanent failure")}
+			},
 			shouldDelete:     true,
 			expectDeleteCall: true,
 		},
 		{
-			name:             "handler error, should not delete (retry)",
-			handler:          func(ctx context.Context, msg []byte, meta []byte) HandlerResult { return HandlerResult{ShouldDelete: false, Error: errors.New("transient error")} },
+			name: "handler error, should not delete (retry)",
+			handler: func(ctx context.Context, msg []byte, meta []byte) HandlerResult {
+				return HandlerResult{ShouldDelete: false, Error: errors.New("transient error")}
+			},
 			shouldDelete:     false,
 			expectDeleteCall: false,
 		},
 		{
-			name:                 "success, but delete fails",
-			handler:              func(ctx context.Context, msg []byte, meta []byte) HandlerResult { return HandlerResult{ShouldDelete: true, Error: nil} },
+			name: "success, but delete fails",
+			handler: func(ctx context.Context, msg []byte, meta []byte) HandlerResult {
+				return HandlerResult{ShouldDelete: true, Error: nil}
+			},
 			shouldDelete:         true,
 			expectDeleteCall:     true,
 			deleteShouldFail:     true,

@@ -29,7 +29,7 @@ func Validate(schemaLoader gojsonschema.JSONLoader, docLoader gojsonschema.JSONL
 
 func FormatErrors(result *gojsonschema.Result, err error) error {
 	if err != nil {
-		return fmt.Errorf("schema validation system error: %v", err)
+		return fmt.Errorf("%w: %v", ErrSchemaValidationSystem, err)
 	}
 	if result.Valid() {
 		return nil
@@ -38,5 +38,5 @@ func FormatErrors(result *gojsonschema.Result, err error) error {
 	for _, desc := range result.Errors() {
 		errMsg += fmt.Sprintf("- %s; ", desc)
 	}
-	return fmt.Errorf("schema validation failed: %s", errMsg)
+	return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, errMsg)
 }

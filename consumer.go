@@ -27,20 +27,6 @@ const (
 	retrySleep = 2 * time.Second
 )
 
-// SQSClient defines the interface for SQS operations needed by the Consumer.
-// This allows for easier testing by mocking the SQS client.
-type SQSClient interface {
-	ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error)
-	DeleteMessage(ctx context.Context, params *sqs.DeleteMessageInput, optFns ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
-}
-
-// Consumer encapsulates the SQS polling and message processing logic.
-type Consumer struct {
-	client   SQSClient
-	queueURL string
-	router   *Router
-}
-
 // NewConsumer creates a new SQS message consumer.
 func NewConsumer(client SQSClient, queueURL string, router *Router) *Consumer {
 	return &Consumer{

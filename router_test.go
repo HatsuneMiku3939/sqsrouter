@@ -215,6 +215,58 @@ func TestRouter_Route(t *testing.T) {
 		assert.Contains(t, result.HandlerResult.Error.Error(), "invalid message payload")
 	})
 }
+func TestRouter_PrePostMiddleware(t *testing.T) {
+	r := newTestRouter(t)
+	type ctxKey string
+	var called bool
+
+	r.AddPre(func(ctx context.Context, raw []byte) (context.Context, *HandlerResult) {
+		return context.WithValue(ctx, ctxKey("mw"), "ok"), nil
+	})
+
+	r.Register(testMessageType, testMessageVersion, func(ctx context.Context, _, _ []byte) HandlerResult {
+		if ctx.Value(ctxKey("mw")) == "ok" {
+			called = true
+		}
+		return HandlerResult{ShouldDelete: false, Error: errors.New("x")}
+	})
+
+	r.AddPost(func(ctx context.Context, res RoutedResult) RoutedResult {
+		res.HandlerResult.ShouldDelete = true
+		res.HandlerResult.Error = nil
+		return res
+	})
+
+	payload := `{"userId":"1","username":"u"}`
+	msg := createTestMessage(t, testMessageType, testMessageVersion, payload)
+	res := r.Route(context.Background(), msg)
+
+	require.True(t, called)
+	require.NoError(t, res.HandlerResult.Error)
+	require.True(t, res.HandlerResult.ShouldDelete)
+}
+
+func TestRouter_PreMiddlewareShortCircuitRetry(t *testing.T) {
+	r := newTestRouter(t)
+	var handlerCalled bool
+
+	r.AddPre(func(ctx context.Context, raw []byte) (context.Context, *HandlerResult) {
+		return ctx, &HandlerResult{ShouldDelete: false, Error: errors.New("block")}
+	})
+
+	r.Register(testMessageType, testMessageVersion, func(ctx context.Context, _, _ []byte) HandlerResult {
+		handlerCalled = true
+		return HandlerResult{ShouldDelete: true}
+	})
+
+	payload := `{"userId":"1","username":"u"}`
+	msg := createTestMessage(t, testMessageType, testMessageVersion, payload)
+	res := r.Route(context.Background(), msg)
+
+	require.False(t, handlerCalled)
+	require.Error(t, res.HandlerResult.Error)
+	require.False(t, res.HandlerResult.ShouldDelete)
+}
 
 func TestRouter_Concurrency(t *testing.T) {
 	r := newTestRouter(t)

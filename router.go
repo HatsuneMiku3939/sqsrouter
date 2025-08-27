@@ -51,6 +51,10 @@ type RoutedResult struct {
 // It receives the message payload and metadata as raw JSON bytes.
 type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
 
+type PreMiddleware func(ctx context.Context, raw []byte) (context.Context, *HandlerResult)
+
+type PostMiddleware func(ctx context.Context, res RoutedResult) RoutedResult
+
 // Router routes incoming messages to the correct handler based on message type and version.
 // It is safe for concurrent use.
 type Router struct {
@@ -58,6 +62,8 @@ type Router struct {
 	handlers       map[string]MessageHandler
 	schemas        map[string]gojsonschema.JSONLoader
 	envelopeSchema gojsonschema.JSONLoader
+	pre            []PreMiddleware
+	post           []PostMiddleware
 }
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
@@ -103,6 +109,18 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 	return nil
 }
 
+func (r *Router) AddPre(m PreMiddleware) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pre = append(r.pre, m)
+}
+
+func (r *Router) AddPost(m PostMiddleware) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.post = append(r.post, m)
+}
+
 // formatSchemaError is a helper to create a user-friendly error from gojsonschema validation results.
 func formatSchemaError(result *gojsonschema.Result, err error) error {
 	if err != nil {
@@ -129,7 +147,7 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // Malformed envelope is a permanent failure.
+				ShouldDelete: true,
 				Error:        fmt.Errorf("invalid envelope: %w", validationErr),
 			},
 		}
@@ -142,9 +160,24 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // JSON parsing error is a permanent failure.
+				ShouldDelete: true,
 				Error:        fmt.Errorf("failed to parse envelope: %w", err),
 			},
+		}
+	}
+
+	r.mu.RLock()
+	pres := append([]PreMiddleware(nil), r.pre...)
+	r.mu.RUnlock()
+	for _, mw := range pres {
+		var res *HandlerResult
+		ctx, res = mw(ctx, rawMessage)
+		if res != nil {
+			return RoutedResult{
+				MessageType:    envelope.MessageType,
+				MessageVersion: envelope.MessageVersion,
+				HandlerResult:  *res,
+			}
 		}
 	}
 
@@ -161,7 +194,7 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 			MessageType:    envelope.MessageType,
 			MessageVersion: envelope.MessageVersion,
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // No handler means we can't process it, ever.
+				ShouldDelete: true,
 				Error:        fmt.Errorf("no handler registered for %s", key),
 			},
 		}
@@ -175,7 +208,7 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 				MessageType:    envelope.MessageType,
 				MessageVersion: envelope.MessageVersion,
 				HandlerResult: HandlerResult{
-					ShouldDelete: true, // Invalid payload is a permanent failure.
+					ShouldDelete: true,
 					Error:        fmt.Errorf("invalid message payload: %w", validationErr),
 				},
 			}
@@ -185,21 +218,28 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 	// 5. Parse metadata for logging/tracing.
 	var meta messageMetadata
 	if err := json.Unmarshal(envelope.Metadata, &meta); err != nil {
-		// Log as a warning because the message can still be processed,
-		// but context for logging might be missing.
 		log.Printf("⚠️  Warning: could not parse metadata for message. Error: %v", err)
 	}
 
 	// 6. Execute the handler with the validated message payload.
 	handlerResult := handler(ctx, envelope.Message, envelope.Metadata)
 
-	return RoutedResult{
+	routed := RoutedResult{
 		MessageType:    envelope.MessageType,
 		MessageVersion: envelope.MessageVersion,
 		HandlerResult:  handlerResult,
 		MessageID:      meta.MessageID,
 		Timestamp:      meta.Timestamp,
 	}
+
+	r.mu.RLock()
+	posts := append([]PostMiddleware(nil), r.post...)
+	r.mu.RUnlock()
+	for _, mw := range posts {
+		routed = mw(ctx, routed)
+	}
+
+	return routed
 }
 
 // --- Schemas ---

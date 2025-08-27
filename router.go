@@ -24,12 +24,19 @@ func NewRouter(envelopeSchema string) (*Router, error) {
 	}, nil
 }
 
+// WithFailFast toggles the router's fail-fast behavior.
+// When set to true, Route will return a result that requests deletion
+// if any middleware-wrapped core handler returns an error, wrapping it
+// with ErrMiddleware. This method is concurrency-safe.
 func (r *Router) WithFailFast(v bool) {
 	r.mu.Lock()
 	r.failFast = v
 	r.mu.Unlock()
 }
 
+// Use appends one or more middlewares to the router.
+// Middlewares are applied in reverse registration order (last added runs first)
+// when wrapping the core routing function in Route. Concurrency-safe.
 func (r *Router) Use(mw ...Middleware) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -69,7 +76,18 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 	return nil
 }
 
+// coreRoute executes the core routing pipeline without middleware.
+// Steps:
+//  1. Validate the raw envelope against the configured envelope schema. (important-comment)
+//  2. Unmarshal the envelope and derive the handler key.
+//  3. Resolve the registered handler and optional payload schema.
+//  4. If a schema exists, validate the message payload.
+//  5. Marshal metadata and invoke the resolved handler. (important-comment)
+//
+// It returns a RoutedResult and an error when validation or resolution fails.
+// The outer Route method interprets the error according to the fail-fast policy.
 func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult, error) {
+	// Step 1: Validate the envelope structure before any parsing.
 	res, err := jsonschema.Validate(r.envelopeSchema, jsonschema.NewBytesLoader(state.Raw))
 	if validationErr := jsonschema.FormatErrors(res, err); validationErr != nil {
 		rr := RoutedResult{
@@ -83,6 +101,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, rr.HandlerResult.Error
 	}
 
+	// Step 2: Parse the envelope to extract routing metadata and payload.
 	var envelope MessageEnvelope
 	if err := json.Unmarshal(state.Raw, &envelope); err != nil {
 		rr := RoutedResult{
@@ -98,6 +117,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	state.Envelope = &envelope
 	state.HandlerKey = makeKey(envelope.MessageType, envelope.MessageVersion)
 
+	// Step 3: Resolve handler and optional payload schema under read lock.
 	r.mu.RLock()
 	handler, handlerExists := r.handlers[state.HandlerKey]
 	schemaLoader, schemaExists := r.schemas[state.HandlerKey]
@@ -107,6 +127,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	state.HandlerExists = handlerExists
 	state.SchemaExists = schemaExists
 
+	// Step 4: If a schema is registered, validate the message payload.
 	if schemaExists {
 		res, err := jsonschema.Validate(schemaLoader, jsonschema.NewBytesLoader(envelope.Message))
 		if validationErr := jsonschema.FormatErrors(res, err); validationErr != nil {
@@ -122,6 +143,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		}
 	}
 
+	// Step 5: Ensure a handler exists for the resolved key; otherwise fail fast for this message.
 	if !handlerExists {
 		rr := RoutedResult{
 			MessageType:    envelope.MessageType,
@@ -134,9 +156,11 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, rr.HandlerResult.Error
 	}
 
+	// Prepare metadata for the handler invocation.
 	meta := envelope.Metadata
 	state.Metadata = &meta
 
+	// Marshal metadata to JSON so handler signature remains stable and decoupled.
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		rr := RoutedResult{
@@ -150,8 +174,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, rr.HandlerResult.Error
 	}
 
+	// Invoke the resolved handler with payload and metadata.
 	handlerResult := handler(ctx, envelope.Message, metaJSON)
 
+	// Assemble and return the final routed result.
 	rr := RoutedResult{
 		MessageType:    envelope.MessageType,
 		MessageVersion: envelope.MessageVersion,

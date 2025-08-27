@@ -52,9 +52,15 @@ func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc
 
 		if os.Getenv("E2E_MW_FAIL") == "1" {
 			err := fmt.Errorf("e2e middleware forced failure")
+			mt := "unknown"
+			mv := "unknown"
+			if s != nil && s.Envelope != nil {
+				mt = s.Envelope.MessageType
+				mv = s.Envelope.MessageVersion
+			}
 			rr := sqsrouter.RoutedResult{
-				MessageType:    s.Envelope.MessageType,
-				MessageVersion: s.Envelope.MessageVersion,
+				MessageType:    mt,
+				MessageVersion: mv,
 				HandlerResult: sqsrouter.HandlerResult{
 					ShouldDelete: false,
 					Error:        err,

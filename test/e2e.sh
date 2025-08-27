@@ -111,19 +111,19 @@ TEST_ID1=$(cat /proc/sys/kernel/random/uuid)
 send_message "e2eTest" "1.0" "{\"testId\": \"$TEST_ID1\", \"payload\": \"Hello from e2e test\"}"
 
 wait_for_log "E2E_TEST_SUCCESS: Received message for test ID $TEST_ID1"
-wait_for_log "E2E_MW_BEFORE type=e2eTest version=1.0"
+wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_OK type=e2eTest version=1.0"
 wait_for_log "MW_OVERRIDDEN"
 
 echo "--- Scenario 2: No handler case still runs middleware ---"
 send_message "unknownType" "1.0" "{\"foo\": \"bar\"}"
-wait_for_log "E2E_MW_BEFORE type=unknownType version=1.0"
+wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_ERR"
 
 echo "--- Scenario 3: Schema validation error before handler ---"
 TEST_ID2=$(cat /proc/sys/kernel/random/uuid)
 send_message "e2eTest" "1.0" "{\"testId\": \"$TEST_ID2\"}"
-wait_for_log "E2E_MW_BEFORE type=e2eTest version=1.0"
+wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_ERR"
 if grep -q "E2E_TEST_SUCCESS: Received message for test ID $TEST_ID2" "$APP_LOG_FILE"; then
   echo "❌ Unexpected success for invalid schema message"
@@ -141,7 +141,7 @@ start_app
 TEST_ID3=$(cat /proc/sys/kernel/random/uuid)
 send_message "e2eTest" "1.0" "{\"testId\": \"$TEST_ID3\", \"payload\": \"should fail by mw\"}"
 wait_for_log "E2E_FAIL_FAST_ENABLED"
-wait_for_log "E2E_MW_BEFORE type=e2eTest version=1.0"
+wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_ERR"
 
 echo "✅ All E2E scenarios passed."

@@ -1,6 +1,7 @@
 package jsonschema
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -53,8 +54,12 @@ func TestValidate_InvalidDocument(t *testing.T) {
 	if res.Valid() {
 		t.Fatalf("expected document to be invalid")
 	}
-	if ferr := FormatErrors(res, nil); ferr == nil {
+	ferr := FormatErrors(res, nil)
+	if ferr == nil {
 		t.Fatalf("expected FormatErrors to return error for invalid result")
+	}
+	if !errors.Is(ferr, ErrSchemaValidationFailed) {
+		t.Fatalf("expected error to wrap ErrSchemaValidationFailed, got: %v", ferr)
 	}
 }
 
@@ -62,6 +67,9 @@ func TestFormatErrors_SystemError(t *testing.T) {
 	sysErr := FormatErrors(nil, assertError{})
 	if sysErr == nil {
 		t.Fatalf("expected non-nil error for system error")
+	}
+	if !errors.Is(sysErr, ErrSchemaValidationSystem) {
+		t.Fatalf("expected error to wrap ErrSchemaValidationSystem, got: %v", sysErr)
 	}
 }
 

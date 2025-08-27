@@ -190,18 +190,6 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	state.HandlerExists = handlerExists
 	state.SchemaExists = schemaExists
 
-	if !handlerExists {
-		rr := RoutedResult{
-			MessageType:    envelope.MessageType,
-			MessageVersion: envelope.MessageVersion,
-			HandlerResult: HandlerResult{
-				ShouldDelete: true,
-				Error:        fmt.Errorf("no handler registered for %s", state.HandlerKey),
-			},
-		}
-		return rr, rr.HandlerResult.Error
-	}
-
 	if schemaExists {
 		res, err := gojsonschema.Validate(schemaLoader, gojsonschema.NewBytesLoader(envelope.Message))
 		if validationErr := formatSchemaError(res, err); validationErr != nil {
@@ -215,6 +203,18 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			}
 			return rr, rr.HandlerResult.Error
 		}
+	}
+
+	if !handlerExists {
+		rr := RoutedResult{
+			MessageType:    envelope.MessageType,
+			MessageVersion: envelope.MessageVersion,
+			HandlerResult: HandlerResult{
+				ShouldDelete: true,
+				Error:        fmt.Errorf("no handler registered for %s", state.HandlerKey),
+			},
+		}
+		return rr, rr.HandlerResult.Error
 	}
 
 	var meta messageMetadata

@@ -80,7 +80,7 @@ type Router struct {
 func NewRouter(envelopeSchema string) (*Router, error) {
 	loader := gojsonschema.NewStringLoader(envelopeSchema)
 	if _, err := gojsonschema.NewSchema(loader); err != nil {
-		return nil, fmt.Errorf("invalid envelope schema: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidEnvelopeSchema, err)
 	}
 
 	return &Router{
@@ -127,7 +127,7 @@ func (r *Router) Register(messageType, messageVersion string, handler MessageHan
 func (r *Router) RegisterSchema(messageType, messageVersion string, schema string) error {
 	loader := gojsonschema.NewStringLoader(schema)
 	if _, err := gojsonschema.NewSchema(loader); err != nil {
-		return fmt.Errorf("invalid schema for %s:%s: %w", messageType, messageVersion, err)
+		return fmt.Errorf("%w for %s:%s: %v", ErrInvalidSchema, messageType, messageVersion, err)
 	}
 
 	key := makeKey(messageType, messageVersion)
@@ -139,7 +139,7 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 
 func formatSchemaError(result *gojsonschema.Result, err error) error {
 	if err != nil {
-		return fmt.Errorf("schema validation system error: %w", err)
+		return fmt.Errorf("%w: %v", ErrSchemaValidationSystem, err)
 	}
 	if result.Valid() {
 		return nil
@@ -149,7 +149,7 @@ func formatSchemaError(result *gojsonschema.Result, err error) error {
 	for _, desc := range result.Errors() {
 		errMsg += fmt.Sprintf("- %s; ", desc)
 	}
-	return fmt.Errorf("schema validation failed: %s", errMsg)
+	return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, errMsg)
 }
 
 func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult, error) {
@@ -160,7 +160,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
 				ShouldDelete: true,
-				Error:        fmt.Errorf("invalid envelope: %w", validationErr),
+				Error:        fmt.Errorf("%w: %v", ErrInvalidEnvelope, validationErr),
 			},
 		}
 		return rr, rr.HandlerResult.Error
@@ -173,7 +173,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
 				ShouldDelete: true,
-				Error:        fmt.Errorf("failed to parse envelope: %w", err),
+				Error:        fmt.Errorf("%w: %v", ErrFailedToParseEnvelope, err),
 			},
 		}
 		return rr, rr.HandlerResult.Error
@@ -198,7 +198,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				MessageVersion: envelope.MessageVersion,
 				HandlerResult: HandlerResult{
 					ShouldDelete: true,
-					Error:        fmt.Errorf("invalid message payload: %w", validationErr),
+					Error:        fmt.Errorf("%w: %v", ErrInvalidMessagePayload, validationErr),
 				},
 			}
 			return rr, rr.HandlerResult.Error
@@ -211,7 +211,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageVersion: envelope.MessageVersion,
 			HandlerResult: HandlerResult{
 				ShouldDelete: true,
-				Error:        fmt.Errorf("no handler registered for %s", state.HandlerKey),
+				Error:        fmt.Errorf("%w for %s", ErrNoHandlerRegistered, state.HandlerKey),
 			},
 		}
 		return rr, rr.HandlerResult.Error
@@ -260,7 +260,7 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 				MessageVersion: routed.MessageVersion,
 				HandlerResult: HandlerResult{
 					ShouldDelete: true,
-					Error:        fmt.Errorf("middleware: %w", err),
+					Error:        fmt.Errorf("%w: %v", ErrMiddleware, err),
 				},
 				MessageID: routed.MessageID,
 				Timestamp: routed.Timestamp,

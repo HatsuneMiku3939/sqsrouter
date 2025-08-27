@@ -4,18 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/hatsunemiku3939/sqsrouter/pkg/jsonschema"
 )
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string) (*Router, error) {
-	loader := NewStringLoader(envelopeSchema)
-	if _, err := NewSchema(loader); err != nil {
+	loader := jsonschema.NewStringLoader(envelopeSchema)
+	if _, err := jsonschema.NewSchema(loader); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidEnvelopeSchema, err)
 	}
 
 	return &Router{
 		handlers:       make(map[string]MessageHandler),
-		schemas:        make(map[string]JSONLoader),
+		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
 		failFast:       false,
@@ -55,8 +57,8 @@ func (r *Router) Register(messageType, messageVersion string, handler MessageHan
 
 // RegisterSchema adds a JSON schema for validating a specific message type and version.
 func (r *Router) RegisterSchema(messageType, messageVersion string, schema string) error {
-	loader := NewStringLoader(schema)
-	if _, err := NewSchema(loader); err != nil {
+	loader := jsonschema.NewStringLoader(schema)
+	if _, err := jsonschema.NewSchema(loader); err != nil {
 		return fmt.Errorf("%w for %s:%s: %v", ErrInvalidSchema, messageType, messageVersion, err)
 	}
 
@@ -68,8 +70,8 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 }
 
 func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult, error) {
-	res, err := Validate(r.envelopeSchema, NewBytesLoader(state.Raw))
-	if validationErr := FormatErrors(res, err); validationErr != nil {
+	res, err := jsonschema.Validate(r.envelopeSchema, jsonschema.NewBytesLoader(state.Raw))
+	if validationErr := jsonschema.FormatErrors(res, err); validationErr != nil {
 		rr := RoutedResult{
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
@@ -106,8 +108,8 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	state.SchemaExists = schemaExists
 
 	if schemaExists {
-		res, err := Validate(schemaLoader, NewBytesLoader(envelope.Message))
-		if validationErr := FormatErrors(res, err); validationErr != nil {
+		res, err := jsonschema.Validate(schemaLoader, jsonschema.NewBytesLoader(envelope.Message))
+		if validationErr := jsonschema.FormatErrors(res, err); validationErr != nil {
 			rr := RoutedResult{
 				MessageType:    envelope.MessageType,
 				MessageVersion: envelope.MessageVersion,

@@ -12,4 +12,5 @@ var (
 	ErrInvalidMessagePayload  = errors.New("invalid message payload")
 	ErrNoHandlerRegistered    = errors.New("no handler registered")
 	ErrMiddleware             = errors.New("middleware")
+	ErrPanic                  = errors.New("panic recovered")
 )

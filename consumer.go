@@ -86,8 +86,17 @@ func (c *Consumer) Start(ctx context.Context) {
 	log.Println("✅ Graceful shutdown complete. All processed messages are handled.")
 }
 
+// Per-message worker is guarded with panic recovery to prevent a single faulty message (handler/middleware)
+// from crashing the worker goroutine or impacting other messages. The failure is logged and the worker continues.
+
 // processMessage routes, handles, and deletes a single SQS message.
 func (c *Consumer) processMessage(ctx context.Context, msg *types.Message) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("ERROR: Panic recovered while processing a message: %v", rec)
+		}
+	}()
+
 	if msg.Body == nil {
 		log.Println("ERROR: Received message with empty body.")
 		return

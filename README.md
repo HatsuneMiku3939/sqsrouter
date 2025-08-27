@@ -1,2 +1,2 @@
 # sqsrouter
-Documentation: docs/agents.md
+Documentation: agents.md

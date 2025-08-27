@@ -31,11 +31,8 @@ type messageMetadata struct {
 
 // HandlerResult indicates the outcome of processing a message.
 type HandlerResult struct {
-	// ShouldDelete is true if the message was processed (successfully or not) and should be deleted from the queue.
-	// Set to false for transient errors where a retry is desired.
 	ShouldDelete bool
-	// Error contains any error that occurred during processing. nil for success.
-	Error error
+	Error        error
 }
 
 // RoutedResult contains the complete result after a message has been routed and handled.
@@ -51,6 +48,22 @@ type RoutedResult struct {
 // It receives the message payload and metadata as raw JSON bytes.
 type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
 
+type RouteState struct {
+	Raw           []byte
+	Envelope      *messageEnvelope
+	HandlerKey    string
+	HandlerExists bool
+	SchemaExists  bool
+	Metadata      *messageMetadata
+	Handler       MessageHandler
+	Schema        gojsonschema.JSONLoader
+}
+
+// HandlerFunc is the function signature wrapped by middlewares.
+type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
+
+type Middleware func(next HandlerFunc) HandlerFunc
+
 // Router routes incoming messages to the correct handler based on message type and version.
 // It is safe for concurrent use.
 type Router struct {
@@ -58,12 +71,14 @@ type Router struct {
 	handlers       map[string]MessageHandler
 	schemas        map[string]gojsonschema.JSONLoader
 	envelopeSchema gojsonschema.JSONLoader
+
+	middlewares []Middleware
+	failFast    bool
 }
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string) (*Router, error) {
 	loader := gojsonschema.NewStringLoader(envelopeSchema)
-	// Validate the schema itself upon creation to fail fast.
 	if _, err := gojsonschema.NewSchema(loader); err != nil {
 		return nil, fmt.Errorf("invalid envelope schema: %w", err)
 	}
@@ -72,7 +87,27 @@ func NewRouter(envelopeSchema string) (*Router, error) {
 		handlers:       make(map[string]MessageHandler),
 		schemas:        make(map[string]gojsonschema.JSONLoader),
 		envelopeSchema: loader,
+		middlewares:    nil,
+		failFast:       false,
 	}, nil
+}
+
+func (r *Router) WithFailFast(v bool) {
+	r.mu.Lock()
+	r.failFast = v
+	r.mu.Unlock()
+}
+
+func (r *Router) Use(mw ...Middleware) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(mw) == 0 {
+		return
+	}
+	newSlice := make([]Middleware, 0, len(r.middlewares)+len(mw))
+	newSlice = append(newSlice, r.middlewares...)
+	newSlice = append(newSlice, mw...)
+	r.middlewares = newSlice
 }
 
 // makeKey creates a consistent key for maps from message type and version.
@@ -91,7 +126,6 @@ func (r *Router) Register(messageType, messageVersion string, handler MessageHan
 // RegisterSchema adds a JSON schema for validating a specific message type and version.
 func (r *Router) RegisterSchema(messageType, messageVersion string, schema string) error {
 	loader := gojsonschema.NewStringLoader(schema)
-	// Validate the schema itself upon registration.
 	if _, err := gojsonschema.NewSchema(loader); err != nil {
 		return fmt.Errorf("invalid schema for %s:%s: %w", messageType, messageVersion, err)
 	}
@@ -103,7 +137,6 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 	return nil
 }
 
-// formatSchemaError is a helper to create a user-friendly error from gojsonschema validation results.
 func formatSchemaError(result *gojsonschema.Result, err error) error {
 	if err != nil {
 		return fmt.Errorf("schema validation system error: %w", err)
@@ -119,91 +152,126 @@ func formatSchemaError(result *gojsonschema.Result, err error) error {
 	return fmt.Errorf("schema validation failed: %s", errMsg)
 }
 
-// Route validates and dispatches a raw message to the appropriate registered handler.
-func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
-	// 1. Validate the message against the envelope schema.
-	// This ensures the message has the basic structure required for routing.
-	result, err := gojsonschema.Validate(r.envelopeSchema, gojsonschema.NewBytesLoader(rawMessage))
-	if validationErr := formatSchemaError(result, err); validationErr != nil {
-		return RoutedResult{
+func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult, error) {
+	res, err := gojsonschema.Validate(r.envelopeSchema, gojsonschema.NewBytesLoader(state.Raw))
+	if validationErr := formatSchemaError(res, err); validationErr != nil {
+		rr := RoutedResult{
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // Malformed envelope is a permanent failure.
+				ShouldDelete: true,
 				Error:        fmt.Errorf("invalid envelope: %w", validationErr),
 			},
 		}
+		return rr, rr.HandlerResult.Error
 	}
 
-	// 2. Unmarshal the envelope to access routing info and payload.
 	var envelope messageEnvelope
-	if err := json.Unmarshal(rawMessage, &envelope); err != nil {
-		return RoutedResult{
+	if err := json.Unmarshal(state.Raw, &envelope); err != nil {
+		rr := RoutedResult{
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // JSON parsing error is a permanent failure.
+				ShouldDelete: true,
 				Error:        fmt.Errorf("failed to parse envelope: %w", err),
 			},
 		}
+		return rr, rr.HandlerResult.Error
 	}
+	state.Envelope = &envelope
+	state.HandlerKey = makeKey(envelope.MessageType, envelope.MessageVersion)
 
-	key := makeKey(envelope.MessageType, envelope.MessageVersion)
-
-	// 3. Find the handler and schema for the message.
 	r.mu.RLock()
-	handler, handlerExists := r.handlers[key]
-	schemaLoader, schemaExists := r.schemas[key]
+	handler, handlerExists := r.handlers[state.HandlerKey]
+	schemaLoader, schemaExists := r.schemas[state.HandlerKey]
 	r.mu.RUnlock()
+	state.Handler = handler
+	state.Schema = schemaLoader
+	state.HandlerExists = handlerExists
+	state.SchemaExists = schemaExists
 
 	if !handlerExists {
-		return RoutedResult{
+		rr := RoutedResult{
 			MessageType:    envelope.MessageType,
 			MessageVersion: envelope.MessageVersion,
 			HandlerResult: HandlerResult{
-				ShouldDelete: true, // No handler means we can't process it, ever.
-				Error:        fmt.Errorf("no handler registered for %s", key),
+				ShouldDelete: true,
+				Error:        fmt.Errorf("no handler registered for %s", state.HandlerKey),
 			},
 		}
+		return rr, rr.HandlerResult.Error
 	}
 
-	// 4. If a schema is registered for this message type, validate the payload.
 	if schemaExists {
-		result, err := gojsonschema.Validate(schemaLoader, gojsonschema.NewBytesLoader(envelope.Message))
-		if validationErr := formatSchemaError(result, err); validationErr != nil {
-			return RoutedResult{
+		res, err := gojsonschema.Validate(schemaLoader, gojsonschema.NewBytesLoader(envelope.Message))
+		if validationErr := formatSchemaError(res, err); validationErr != nil {
+			rr := RoutedResult{
 				MessageType:    envelope.MessageType,
 				MessageVersion: envelope.MessageVersion,
 				HandlerResult: HandlerResult{
-					ShouldDelete: true, // Invalid payload is a permanent failure.
+					ShouldDelete: true,
 					Error:        fmt.Errorf("invalid message payload: %w", validationErr),
 				},
 			}
+			return rr, rr.HandlerResult.Error
 		}
 	}
 
-	// 5. Parse metadata for logging/tracing.
 	var meta messageMetadata
 	if err := json.Unmarshal(envelope.Metadata, &meta); err != nil {
-		// Log as a warning because the message can still be processed,
-		// but context for logging might be missing.
 		log.Printf("⚠️  Warning: could not parse metadata for message. Error: %v", err)
 	}
+	state.Metadata = &meta
 
-	// 6. Execute the handler with the validated message payload.
 	handlerResult := handler(ctx, envelope.Message, envelope.Metadata)
 
-	return RoutedResult{
+	rr := RoutedResult{
 		MessageType:    envelope.MessageType,
 		MessageVersion: envelope.MessageVersion,
 		HandlerResult:  handlerResult,
 		MessageID:      meta.MessageID,
 		Timestamp:      meta.Timestamp,
 	}
+	return rr, nil
+}
+
+// Route validates and dispatches a raw message to the appropriate registered handler.
+func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
+	state := &RouteState{Raw: rawMessage}
+
+	r.mu.RLock()
+	mws := r.middlewares
+	failFast := r.failFast
+	r.mu.RUnlock()
+
+	core := func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+		return r.coreRoute(ctx, s)
+	}
+
+	for i := len(mws) - 1; i >= 0; i-- {
+		core = mws[i](core)
+	}
+
+	routed, err := core(ctx, state)
+	if err != nil {
+		if failFast {
+			return RoutedResult{
+				MessageType:    routed.MessageType,
+				MessageVersion: routed.MessageVersion,
+				HandlerResult: HandlerResult{
+					ShouldDelete: true,
+					Error:        fmt.Errorf("middleware: %w", err),
+				},
+				MessageID: routed.MessageID,
+				Timestamp: routed.Timestamp,
+			}
+		}
+		return routed
+	}
+	return routed
 }
 
 // --- Schemas ---
-// Schemas are defined as variables for clarity and separation.
 
 var EnvelopeSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",

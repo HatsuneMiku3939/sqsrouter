@@ -1,6 +1,11 @@
-version: "2"
 run:
   tests: false
+  skip-dirs:
+    - mocks
+    - third_party$
+    - builtin$
+    - examples$
+
 linters:
   enable:
     - bodyclose
@@ -12,7 +17,6 @@ linters:
     - gocritic
     - gocyclo
     - gosec
-    - maintidx
     - misspell
     - mnd
     - nestif
@@ -26,37 +30,17 @@ linters:
     - govet
     - ineffassign
     - unused
-  settings:
-    errcheck:
-      check-blank: true
-    gocyclo:
-      min-complexity: 30
-    mnd:
-      checks:
-        - argument
-        - case
-        - condition
-        - return
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - mocks
-      - third_party$
-      - builtin$
-      - examples$
-formatters:
-  enable:
     - gofmt
     - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - mocks
-      - third_party$
-      - builtin$
-      - examples$
+
+linters-settings:
+  errcheck:
+    check-blank: true
+  gocyclo:
+    min-complexity: 30
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - return

@@ -219,7 +219,19 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	meta := envelope.Metadata
 	state.Metadata = &meta
 
-	metaJSON, _ := json.Marshal(meta)
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		rr := RoutedResult{
+			MessageType:    envelope.MessageType,
+			MessageVersion: envelope.MessageVersion,
+			HandlerResult: HandlerResult{
+				ShouldDelete: true,
+				Error:        fmt.Errorf("failed to marshal metadata: %w", err),
+			},
+		}
+		return rr, rr.HandlerResult.Error
+	}
+
 	handlerResult := handler(ctx, envelope.Message, metaJSON)
 
 	rr := RoutedResult{

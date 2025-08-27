@@ -35,6 +35,7 @@ Pipeline flow:
 - Handler: Executes business logic and returns a HandlerResult (delete decision and error)
 
 Key types:
+- Exported public types are defined in types.go
 - Consumer: NewConsumer(client, queueURL, router).Start(ctx)
 - Router: NewRouter(envelopeSchema).Register(type, version, handler).RegisterSchema(type, version, schema).Route(ctx, raw)
 
@@ -195,6 +196,7 @@ If you hit local dependency issues:
   - If ShouldDelete=false, the message is not deleted; after visibility timeout it will be received again by the consumer
 
 ## 11) References
+- Public types: types.go
 - Router/Schema/Route: router.go
 - Consumer/Start/processMessage: consumer.go
 - Example: example/basic/main.go

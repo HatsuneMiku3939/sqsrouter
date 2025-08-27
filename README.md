@@ -119,6 +119,7 @@ Example app
 sqsrouter/
 ├── consumer.go                 # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
 ├── router.go                   # Routing by type/version, schema validation, handler registry
+├── types.go                    # All exported public types (structs, interfaces, function types)
 ├── example/
 │   └── basic/                  # Minimal runnable example
 ├── test/

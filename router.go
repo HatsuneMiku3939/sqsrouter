@@ -173,9 +173,24 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		}
 		return rr, rr.HandlerResult.Error
 	}
+	// Protect handler invocation with panic recovery.
+	// Any panic raised by user-defined handlers will be recovered and converted into a HandlerResult (ShouldDelete=true).
+	// This ensures the router remains resilient and surfaces the failure through the normal error channel.
+
 
 	// Invoke the resolved handler with payload and metadata.
-	handlerResult := handler(ctx, envelope.Message, metaJSON)
+	var handlerResult HandlerResult
+	func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				handlerResult = HandlerResult{
+					ShouldDelete: true,
+					Error:        fmt.Errorf("%w: %v", ErrPanic, rec),
+				}
+			}
+		}()
+		handlerResult = handler(ctx, envelope.Message, metaJSON)
+	}()
 
 	// Assemble and return the final routed result.
 	rr := RoutedResult{
@@ -202,10 +217,44 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 	}
 
 	for i := len(mws) - 1; i >= 0; i-- {
+	// Execute the middleware-wrapped core with an outermost panic recovery.
+	// If any middleware or the core routing panics, we recover here and convert it into an error result.
+	// The constructed RoutedResult uses "unknown" placeholders when the envelope was not yet parsed.
+
 		core = mws[i](core)
 	}
 
-	routed, err := core(ctx, state)
+	var routed RoutedResult
+	var err error
+	func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				msgType := "unknown"
+				msgVer := "unknown"
+				msgID := ""
+				timestamp := ""
+				if state.Envelope != nil {
+					msgType = state.Envelope.MessageType
+					msgVer = state.Envelope.MessageVersion
+					msgID = state.Envelope.Metadata.MessageID
+					timestamp = state.Envelope.Metadata.Timestamp
+				}
+				routed = RoutedResult{
+					MessageType:    msgType,
+					MessageVersion: msgVer,
+					HandlerResult: HandlerResult{
+						ShouldDelete: true,
+						Error:        fmt.Errorf("%w: %v", ErrPanic, rec),
+					},
+					MessageID: msgID,
+					Timestamp: timestamp,
+				}
+				err = routed.HandlerResult.Error
+			}
+		}()
+		routed, err = core(ctx, state)
+	}()
+
 	if err != nil {
 		if failFast {
 			return RoutedResult{

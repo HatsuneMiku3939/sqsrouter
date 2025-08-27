@@ -1,3 +1,19 @@
+# Middleware
+
+Router supports a middleware chain around the Route pipeline.
+
+API:
+- type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
+- type Middleware func(next HandlerFunc) HandlerFunc
+- func (r *Router) Use(mw ...Middleware)
+- func (r *Router) WithFailFast(v bool)
+
+Behavior:
+- Middlewares run in registration order and wrap the core routing steps.
+- Middlewares can read RouteState and modify the returned RoutedResult.
+- Middlewares execute even if no handler is registered.
+- Fail-fast is optional; when enabled, middleware errors map to ShouldDelete=true.
+
 # agents.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪

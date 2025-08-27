@@ -40,6 +40,55 @@ func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte
 	return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
 }
 
+type e2eMiddleware struct{}
+
+func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc {
+	return func(ctx context.Context, s *sqsrouter.RouteState) (sqsrouter.RoutedResult, error) {
+		if s != nil && s.Envelope != nil {
+			log.Printf("E2E_MW_BEFORE type=%s version=%s", s.Envelope.MessageType, s.Envelope.MessageVersion)
+		} else {
+			log.Printf("E2E_MW_BEFORE type=? version=?")
+		}
+
+		if os.Getenv("E2E_MW_FAIL") == "1" {
+			err := fmt.Errorf("e2e middleware forced failure")
+			rr := sqsrouter.RoutedResult{
+				MessageType:    s.Envelope.MessageType,
+				MessageVersion: s.Envelope.MessageVersion,
+				HandlerResult: sqsrouter.HandlerResult{
+					ShouldDelete: false,
+					Error:        err,
+				},
+			}
+			log.Printf("E2E_MW_AFTER_ERR err=%v", err)
+			return rr, err
+		}
+
+		rr, err := next(ctx, s)
+
+		if os.Getenv("E2E_MW_TOUCH") == "1" {
+			rr.MessageID = "MW_OVERRIDDEN"
+		}
+
+		if err != nil {
+			log.Printf("E2E_MW_AFTER_ERR err=%v", err)
+		} else {
+			log.Printf("E2E_MW_AFTER_OK type=%s version=%s", rr.MessageType, rr.MessageVersion)
+		}
+
+		if os.Getenv("E2E_MW_SET_DELETE") == "1" {
+			rr.HandlerResult.ShouldDelete = true
+		}
+
+		return rr, err
+	}
+}
+
+func E2EMiddleware() sqsrouter.Middleware {
+	mw := e2eMiddleware{}
+	return func(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc { return mw.handler(next) }
+}
+
 func main() {
 	appCtx, cancelApp := context.WithCancel(context.Background())
 	shutdownChan := make(chan os.Signal, 1)
@@ -80,6 +129,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not initialize router: %v", err)
 	}
+
+	if os.Getenv("E2E_FAIL_FAST") == "1" {
+		log.Printf("E2E_FAIL_FAST_ENABLED")
+		router.WithFailFast(true)
+	} else {
+		router.WithFailFast(false)
+	}
+
+	testSchema := `{
+		"$schema": "http://json-schema.org/draft-07/schema#",
+		"type": "object",
+		"required": ["testId", "payload"],
+		"properties": {
+			"testId": { "type": "string" },
+			"payload": { "type": "string" }
+		},
+		"additionalProperties": false
+	}`
+	router.RegisterSchema(MsgTypeE2ETest, MsgVersion1_0, testSchema)
+
+	router.Use(E2EMiddleware())
 
 	router.Register(MsgTypeE2ETest, MsgVersion1_0, E2ETestHandler)
 

@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 
-export PATH="$PATH:$(go env GOPATH)/bin"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+TOOLS_DIR="$REPO_ROOT/.tools"
+mkdir -p "$TOOLS_DIR"
+export PATH="$TOOLS_DIR:$PATH"
 
 GOLANGCI_LINT_VERSION="v2.0.2"
 
 function ensure_golangci_lint() {
-	if ! command -v golangci-lint &> /dev/null; then
-		echo "golangci-lint could not be found. Installing..."
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh  | sh -s -- -b $(go env GOPATH)/bin $GOLANGCI_LINT_VERSION
+	local need_install="true"
+	if command -v golangci-lint >/dev/null 2>&1; then
+		local current_version
+		current_version="$(golangci-lint version --format short 2>/dev/null || true)"
+		if [ "$current_version" = "$GOLANGCI_LINT_VERSION" ]; then
+			need_install="false"
+		fi
+	fi
+
+	if [ "$need_install" = "true" ]; then
+		echo "Installing golangci-lint $GOLANGCI_LINT_VERSION into $TOOLS_DIR ..."
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$TOOLS_DIR" "$GOLANGCI_LINT_VERSION"
 	fi
 }
 

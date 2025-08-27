@@ -4,24 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/xeipuuv/gojsonschema"
 )
 
-// messageEnvelope is an internal struct to unmarshal the outer layer of an SQS message.
+// MessageEnvelope is a struct to unmarshal the outer layer of an SQS message.
 // It contains the routing information and the actual message payload.
-type messageEnvelope struct {
+type MessageEnvelope struct {
 	SchemaVersion  string          `json:"schemaVersion"`
 	MessageType    string          `json:"messageType"`
 	MessageVersion string          `json:"messageVersion"`
 	Message        json.RawMessage `json:"message"`
-	Metadata       json.RawMessage `json:"metadata"`
+	Metadata       MessageMetadata `json:"metadata"`
 }
 
-// messageMetadata holds common metadata found in every message.
-type messageMetadata struct {
+// MessageMetadata holds common metadata found in every message.
+type MessageMetadata struct {
 	Timestamp string `json:"timestamp"`
 	Source    string `json:"source"`
 	MessageID string `json:"messageId"`
@@ -50,11 +49,11 @@ type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON [
 
 type RouteState struct {
 	Raw           []byte
-	Envelope      *messageEnvelope
+	Envelope      *MessageEnvelope
 	HandlerKey    string
 	HandlerExists bool
 	SchemaExists  bool
-	Metadata      *messageMetadata
+	Metadata      *MessageMetadata
 	Handler       MessageHandler
 	Schema        gojsonschema.JSONLoader
 }
@@ -166,7 +165,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, rr.HandlerResult.Error
 	}
 
-	var envelope messageEnvelope
+	var envelope MessageEnvelope
 	if err := json.Unmarshal(state.Raw, &envelope); err != nil {
 		rr := RoutedResult{
 			MessageType:    "unknown",
@@ -217,13 +216,23 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, rr.HandlerResult.Error
 	}
 
-	var meta messageMetadata
-	if err := json.Unmarshal(envelope.Metadata, &meta); err != nil {
-		log.Printf("⚠️  Warning: could not parse metadata for message. Error: %v", err)
-	}
+	meta := envelope.Metadata
 	state.Metadata = &meta
 
-	handlerResult := handler(ctx, envelope.Message, envelope.Metadata)
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		rr := RoutedResult{
+			MessageType:    envelope.MessageType,
+			MessageVersion: envelope.MessageVersion,
+			HandlerResult: HandlerResult{
+				ShouldDelete: true,
+				Error:        fmt.Errorf("failed to marshal metadata: %w", err),
+			},
+		}
+		return rr, rr.HandlerResult.Error
+	}
+
+	handlerResult := handler(ctx, envelope.Message, metaJSON)
 
 	rr := RoutedResult{
 		MessageType:    envelope.MessageType,

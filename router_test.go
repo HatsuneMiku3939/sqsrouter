@@ -214,6 +214,32 @@ func TestRouter_Route(t *testing.T) {
 		assert.True(t, result.HandlerResult.ShouldDelete, "Should delete invalid payload")
 		assert.Contains(t, result.HandlerResult.Error.Error(), "invalid message payload")
 	})
+
+	t.Run("should not invoke handler when metadata is invalid json", func(t *testing.T) {
+		r := newTestRouter(t)
+
+		called := false
+		r.Register(testMessageType, testMessageVersion, func(ctx context.Context, msg, meta []byte) HandlerResult {
+			called = true
+			return HandlerResult{ShouldDelete: true, Error: nil}
+		})
+
+		payload := `{"userId": "123", "username": "test"}`
+		raw := fmt.Sprintf(`{
+			"schemaVersion": "1.0",
+			"messageType": "%s",
+			"messageVersion": "%s",
+			"message": %s,
+			"metadata": 123
+		}`, testMessageType, testMessageVersion, payload)
+
+		result := r.Route(context.Background(), []byte(raw))
+
+		assert.True(t, result.HandlerResult.ShouldDelete)
+		assert.Error(t, result.HandlerResult.Error)
+		assert.False(t, called, "handler must not be invoked when metadata unmarshal fails")
+	})
+
 }
 
 func TestRouter_Concurrency(t *testing.T) {

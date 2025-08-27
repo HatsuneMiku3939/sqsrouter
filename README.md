@@ -23,6 +23,7 @@ sqsrouter helps Go developers build message-driven apps on SQS. It abstracts lon
 ## Features
 - Route messages by messageType and messageVersion
 - Optional JSON Schema validation per type/version
+- Middleware chain around routing with optional fail-fast
 - Concurrent processing, timeouts, and graceful shutdown
 - Clear delete vs. retry contract via handler results
 - Simple, testable design
@@ -89,6 +90,26 @@ func main() {
   consumer.Start(ctx) // blocks; cancel ctx to stop
 }
 ```
+## Middleware
+
+Register middlewares to wrap the routing pipeline:
+
+```go
+router.Use(TracingMW(), LoggingMW(), MetricsMW())
+// or
+mws := []sqsrouter.Middleware{TracingMW(), LoggingMW(), MetricsMW()}
+router.Use(mws...)
+```
+
+Control behavior on middleware errors:
+
+```go
+router.WithFailFast(true)  // map middleware error to delete=true
+router.WithFailFast(false) // keep RoutedResult as returned by chain
+```
+
+Middlewares run even if no handler is registered, so you can log/measure such cases.
+
 
 Example app
 - See example/basic for a runnable example.

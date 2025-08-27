@@ -68,6 +68,7 @@ func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc
 
 		if os.Getenv("E2E_MW_TOUCH") == "1" {
 			rr.MessageID = "MW_OVERRIDDEN"
+			log.Printf("MW_OVERRIDDEN")
 		}
 
 		if err != nil {

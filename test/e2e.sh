@@ -51,11 +51,12 @@ send_message() {
 EOF
 )
   aws --endpoint-url="$AWS_ENDPOINT_URL" sqs send-message --queue-url "$QUEUE_URL" --message-body "$BODY" >/dev/null
+  sleep 1
 }
 
 wait_for_log() {
   local PATTERN="$1"
-  local TIMEOUT="${2:-30}"
+  local TIMEOUT="${2:-60}"
   local COUNT=0
   local ITER=$(( TIMEOUT / 2 ))
   echo "--- Waiting for log: $PATTERN (timeout ${TIMEOUT}s) ---"

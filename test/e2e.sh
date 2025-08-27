@@ -81,10 +81,26 @@ echo "--- Starting LocalStack container ---"
 sudo docker compose -f "$DOCKER_COMPOSE_FILE" up -d
 
 echo "--- Waiting for SQS service to be available ---"
-until aws --endpoint-url="$AWS_ENDPOINT_URL" sqs list-queues &> /dev/null; do
+SQS_WAIT_TIMEOUT="${SQS_WAIT_TIMEOUT:-60}"
+SQS_WAIT_INTERVAL="${SQS_WAIT_INTERVAL:-2}"
+SQS_WAIT_ELAPSED=0
+SQS_READY=0
+while [ "$SQS_WAIT_ELAPSED" -lt "$SQS_WAIT_TIMEOUT" ]; do
+  if aws --endpoint-url="$AWS_ENDPOINT_URL" sqs list-queues &> /dev/null; then
+    SQS_READY=1
+    break
+  fi
   echo -n "."
-  sleep 2
+  sleep "$SQS_WAIT_INTERVAL"
+  SQS_WAIT_ELAPSED=$(( SQS_WAIT_ELAPSED + SQS_WAIT_INTERVAL ))
 done
+if [ "$SQS_READY" -ne 1 ]; then
+  echo
+  echo "❌ Timeout waiting for SQS to become ready after ${SQS_WAIT_TIMEOUT}s."
+  echo "--- docker logs (last 100 lines) ---"
+  sudo docker compose -f "$DOCKER_COMPOSE_FILE" logs --tail 100 || true
+  exit 1
+fi
 echo " SQS is ready."
 
 echo "--- Creating SQS queue: $QUEUE_NAME ---"

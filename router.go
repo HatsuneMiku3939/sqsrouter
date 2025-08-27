@@ -177,7 +177,6 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	// Any panic raised by user-defined handlers will be recovered and converted into a HandlerResult (ShouldDelete=true).
 	// This ensures the router remains resilient and surfaces the failure through the normal error channel.
 
-
 	// Invoke the resolved handler with payload and metadata.
 	var handlerResult HandlerResult
 	func() {
@@ -217,9 +216,9 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 	}
 
 	for i := len(mws) - 1; i >= 0; i-- {
-	// Execute the middleware-wrapped core with an outermost panic recovery.
-	// If any middleware or the core routing panics, we recover here and convert it into an error result.
-	// The constructed RoutedResult uses "unknown" placeholders when the envelope was not yet parsed.
+		// Execute the middleware-wrapped core with an outermost panic recovery.
+		// If any middleware or the core routing panics, we recover here and convert it into an error result.
+		// The constructed RoutedResult uses "unknown" placeholders when the envelope was not yet parsed.
 
 		core = mws[i](core)
 	}

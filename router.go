@@ -202,6 +202,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 
 // Route validates and dispatches a raw message to the appropriate registered handler.
 func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
+	// Prepare per-message state container.
 	state := &RouteState{Raw: rawMessage}
 
 	r.mu.RLock()
@@ -213,15 +214,14 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 	}
 
 	for i := len(mws) - 1; i >= 0; i-- {
-		// Execute the middleware-wrapped core with an outermost panic recovery.
-		// If any middleware or the core routing panics, we recover here and convert it into an error result.
-		// The constructed RoutedResult uses "unknown" placeholders when the envelope was not yet parsed.
-
 		core = mws[i](core)
 	}
 
+	// Execute the middleware-wrapped core with an outermost panic recovery guard.
 	var routed RoutedResult
 	var err error
+	panicOccurred := false
+
 	func() {
 		defer func() {
 			if rec := recover(); rec != nil {
@@ -245,18 +245,24 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 					MessageID: msgID,
 					Timestamp: timestamp,
 				}
+
 				decided := r.policy.Decide(ctx, state, FailHandlerPanic, tmp.HandlerResult.Error, tmp)
 				routed = decided
-				err = decided.HandlerResult.Error
+
+				err = nil
+				panicOccurred = true
 			}
 		}()
+
+		// Execute the wrapped core; this may return an error (handled below) or panic (handled by defer above).
 		routed, err = core(ctx, state)
 	}()
 
-	if err != nil {
+	if !panicOccurred && err != nil {
 		decided := r.policy.Decide(ctx, state, FailMiddlewareError, err, routed)
 		return decided
 	}
+
 	return routed
 }
 

@@ -8,6 +8,10 @@ DOCKER_COMPOSE_FILE="${TEST_DIR}/docker-compose.yaml"
 APP_LOG_FILE="/tmp/e2e-app.log"
 QUEUE_NAME="e2e-test-queue"
 AWS_ENDPOINT_URL="http://localhost:4566"
+# --- AWS credentials defaults for LocalStack ---
+# LocalStack requires AWS clients to have credentials/region set, but any dummy values work.
+# These exports only apply when variables are not already set in the environment.
+
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-dummy}"

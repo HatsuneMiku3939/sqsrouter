@@ -9,29 +9,23 @@ import (
 )
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
-func NewRouter(envelopeSchema string) (*Router, error) {
+func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 	loader := jsonschema.NewStringLoader(envelopeSchema)
 	if _, err := jsonschema.NewSchema(loader); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidEnvelopeSchema, err)
 	}
 
-	return &Router{
+	r := &Router{
 		handlers:       make(map[string]MessageHandler),
 		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
-		failFast:       false,
-	}, nil
-}
-
-// WithFailFast toggles the router's fail-fast behavior.
-// When set to true, Route will return a result that requests deletion
-// if any middleware-wrapped core handler returns an error, wrapping it
-// with ErrMiddleware. This method is concurrency-safe.
-func (r *Router) WithFailFast(v bool) {
-	r.mu.Lock()
-	r.failFast = v
-	r.mu.Unlock()
+		policy:         DLQDefaultPolicy{},
+	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r, nil
 }
 
 // Use appends one or more middlewares to the router.
@@ -94,11 +88,11 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true,
+				ShouldDelete: false,
 				Error:        fmt.Errorf("%w: %v", ErrInvalidEnvelope, validationErr),
 			},
 		}
-		return rr, rr.HandlerResult.Error
+		return r.policy.Decide(ctx, state, FailEnvelopeSchema, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
 	}
 
 	// Step 2: Parse the envelope to extract routing metadata and payload.
@@ -108,11 +102,11 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageType:    "unknown",
 			MessageVersion: "unknown",
 			HandlerResult: HandlerResult{
-				ShouldDelete: true,
+				ShouldDelete: false,
 				Error:        fmt.Errorf("%w: %v", ErrFailedToParseEnvelope, err),
 			},
 		}
-		return rr, rr.HandlerResult.Error
+		return r.policy.Decide(ctx, state, FailEnvelopeParse, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
 	}
 	state.Envelope = &envelope
 	state.HandlerKey = makeKey(envelope.MessageType, envelope.MessageVersion)
@@ -135,11 +129,13 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				MessageType:    envelope.MessageType,
 				MessageVersion: envelope.MessageVersion,
 				HandlerResult: HandlerResult{
-					ShouldDelete: true,
+					ShouldDelete: false,
 					Error:        fmt.Errorf("%w: %v", ErrInvalidMessagePayload, validationErr),
 				},
+				MessageID: envelope.Metadata.MessageID,
+				Timestamp: envelope.Metadata.Timestamp,
 			}
-			return rr, rr.HandlerResult.Error
+			return r.policy.Decide(ctx, state, FailPayloadSchema, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
 		}
 	}
 
@@ -149,11 +145,13 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageType:    envelope.MessageType,
 			MessageVersion: envelope.MessageVersion,
 			HandlerResult: HandlerResult{
-				ShouldDelete: true,
+				ShouldDelete: false,
 				Error:        fmt.Errorf("%w for %s", ErrNoHandlerRegistered, state.HandlerKey),
 			},
+			MessageID: envelope.Metadata.MessageID,
+			Timestamp: envelope.Metadata.Timestamp,
 		}
-		return rr, rr.HandlerResult.Error
+		return r.policy.Decide(ctx, state, FailNoHandler, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
 	}
 
 	// Prepare metadata for the handler invocation.
@@ -183,7 +181,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		defer func() {
 			if rec := recover(); rec != nil {
 				handlerResult = HandlerResult{
-					ShouldDelete: true,
+					ShouldDelete: false,
 					Error:        fmt.Errorf("%w: %v", ErrPanic, rec),
 				}
 			}
@@ -208,7 +206,6 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 
 	r.mu.RLock()
 	mws := r.middlewares
-	failFast := r.failFast
 	r.mu.RUnlock()
 
 	core := func(ctx context.Context, s *RouteState) (RoutedResult, error) {
@@ -238,36 +235,27 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 					msgID = state.Envelope.Metadata.MessageID
 					timestamp = state.Envelope.Metadata.Timestamp
 				}
-				routed = RoutedResult{
+				tmp := RoutedResult{
 					MessageType:    msgType,
 					MessageVersion: msgVer,
 					HandlerResult: HandlerResult{
-						ShouldDelete: true,
+						ShouldDelete: false,
 						Error:        fmt.Errorf("%w: %v", ErrPanic, rec),
 					},
 					MessageID: msgID,
 					Timestamp: timestamp,
 				}
-				err = routed.HandlerResult.Error
+				decided := r.policy.Decide(ctx, state, FailHandlerPanic, tmp.HandlerResult.Error, tmp)
+				routed = decided
+				err = decided.HandlerResult.Error
 			}
 		}()
 		routed, err = core(ctx, state)
 	}()
 
 	if err != nil {
-		if failFast {
-			return RoutedResult{
-				MessageType:    routed.MessageType,
-				MessageVersion: routed.MessageVersion,
-				HandlerResult: HandlerResult{
-					ShouldDelete: true,
-					Error:        fmt.Errorf("%w: %v", ErrMiddleware, err),
-				},
-				MessageID: routed.MessageID,
-				Timestamp: routed.Timestamp,
-			}
-		}
-		return routed
+		decided := r.policy.Decide(ctx, state, FailMiddlewareError, err, routed)
+		return decided
 	}
 	return routed
 }

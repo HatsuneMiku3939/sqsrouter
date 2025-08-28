@@ -6,14 +6,12 @@ API:
 - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
 - type Middleware func(next HandlerFunc) HandlerFunc
 - func (r *Router) Use(mw ...Middleware)
-- func (r *Router) WithFailFast(v bool)
 
 Behavior:
 - Middlewares run in registration order and wrap the core routing steps.
 - Middlewares can read RouteState and modify the returned RoutedResult.
 - Middlewares execute even if no handler is registered.
-- Fail-fast is optional; when enabled, middleware errors map to ShouldDelete=true.
-
+- Final ShouldDelete/Error is decided by Policy (default DLQDefaultPolicy); middleware errors do not force delete by default.
 # agents.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
@@ -31,7 +29,7 @@ This document is a practical guide to help you understand and use the sqsrouter 
 ## 2) Architecture
 Pipeline flow:
 - Consumer: Receives message batches via SQS Long Polling → processes each message in its own goroutine
-- Router: Validates the envelope → finds the handler → optionally validates payload against a registered schema → runs the handler → returns a RoutedResult
+- Router: Validates the envelope → finds the handler → optionally validates payload against a registered schema → runs the handler → returns a RoutedResult via Policy
 - Handler: Executes business logic and returns a HandlerResult (delete decision and error)
 
 Key types:
@@ -74,8 +72,10 @@ var EnvelopeSchema = `{
 
 ## 4) Router usage
 ```go
-// Create router with envelope schema
+// Create router with envelope schema (uses default DLQDefaultPolicy)
 router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
+// Or provide a custom policy:
+// router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
 if err != nil {
     panic(err) // (Do not panic in production; handle errors properly.)
 }
@@ -98,6 +98,7 @@ router.RegisterSchema("UserCreated", "v1", `{
 
 Route flow:
 1) Validate envelope (invalid structure → permanent failure → delete)
+- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is DLQDefaultPolicy.
 2) Unmarshal envelope
 3) Lookup handler (missing handler → permanent failure → delete)
 4) Validate payload schema if registered (invalid → delete)
@@ -142,7 +143,10 @@ Path: example/basic/main.go
 
 ```go
 // Pseudocode summary (refer to the real example in the repo)
+// Default policy:
 router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
+// Or custom policy:
+// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
 router.Register("UserCreated", "v1", userCreatedHandler)
 router.RegisterSchema("UserCreated", "v1", userCreatedSchemaJSON)
 

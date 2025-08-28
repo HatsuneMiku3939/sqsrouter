@@ -61,8 +61,7 @@ type RouteState struct {
 // HandlerFunc is the function signature wrapped by middlewares.
 type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
 
-// Middleware composes cross-cutting concerns around the routing core, forming a chain of HandlerFunc.
-// Typical use cases: logging, tracing, metrics, auth, and failure policy adjustments.
+// Middleware composes cross-cutting concerns around the routing core, forming a chain of HandlerFunc.// Typical use cases: logging, tracing, metrics, auth, and failure policy adjustments.
 type Middleware func(next HandlerFunc) HandlerFunc
 
 // Router routes incoming messages to the correct handler based on message type and version.
@@ -74,7 +73,7 @@ type Router struct {
 	envelopeSchema gojsonschema.JSONLoader
 
 	middlewares []Middleware
-	failFast    bool
+	policy      Policy
 }
 
 // SQSClient defines the interface for SQS operations needed by the Consumer.

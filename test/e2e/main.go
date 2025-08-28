@@ -137,13 +137,6 @@ func main() {
 		log.Fatalf("Could not initialize router: %v", err)
 	}
 
-	if os.Getenv("E2E_FAIL_FAST") == "1" {
-		log.Printf("E2E_FAIL_FAST_ENABLED")
-		router.WithFailFast(true)
-	} else {
-		router.WithFailFast(false)
-	}
-
 	testSchema := `{
 		"$schema": "http://json-schema.org/draft-07/schema#",
 		"type": "object",

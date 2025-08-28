@@ -74,7 +74,7 @@ type Router struct {
 	envelopeSchema gojsonschema.JSONLoader
 
 	middlewares []Middleware
-	failFast    bool
+	policy      Policy
 }
 
 // SQSClient defines the interface for SQS operations needed by the Consumer.

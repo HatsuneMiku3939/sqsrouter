@@ -155,18 +155,18 @@ if grep -q "E2E_TEST_SUCCESS: Received message for test ID $TEST_ID2" "$APP_LOG_
   exit 1
 fi
 
-echo "--- Scenario 4: Fail-fast with middleware error ---"
+echo "--- Scenario 4: Middleware error does not force delete (policy default) ---"
 kill "$APP_PID" 2>/dev/null || true
 sleep 2
-export E2E_FAIL_FAST=1
+unset E2E_FAIL_FAST
 export E2E_MW_FAIL=1
 unset E2E_MW_TOUCH
 start_app
 
 TEST_ID3=$(cat /proc/sys/kernel/random/uuid)
 send_message "e2eTest" "1.0" "{\"testId\": \"$TEST_ID3\", \"payload\": \"should fail by mw\"}"
-wait_for_log "E2E_FAIL_FAST_ENABLED"
 wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_ERR"
+wait_for_log "RETRYING message ID"
 
 echo "✅ All E2E scenarios passed."

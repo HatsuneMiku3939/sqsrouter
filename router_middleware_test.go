@@ -50,7 +50,7 @@ func TestMiddlewareOrderAndPrePost(t *testing.T) {
 	}
 }
 
-func TestMiddlewareFailFastOption(t *testing.T) {
+func TestMiddlewareErrorDoesNotForceDeleteByDefault(t *testing.T) {
 	router, err := NewRouter(EnvelopeSchema)
 	if err != nil {
 		t.Fatalf("new router: %v", err)
@@ -68,17 +68,41 @@ func TestMiddlewareFailFastOption(t *testing.T) {
 	router.Use(errMW)
 
 	raw := []byte(`{"schemaVersion":"1.0","messageType":"T","messageVersion":"v1","message":{},"metadata":{}}`)
+	rr := router.Route(context.Background(), raw)
 
-	router.WithFailFast(true)
-	rr1 := router.Route(context.Background(), raw)
-	if !rr1.HandlerResult.ShouldDelete || rr1.HandlerResult.Error == nil {
-		t.Fatalf("fail-fast true expected delete with error")
+	if rr.HandlerResult.Error == nil {
+		t.Fatalf("expected middleware error surfaced")
 	}
+	if !rr.HandlerResult.ShouldDelete {
+		t.Fatalf("default policy should respect handler decision; got not delete")
+	}
+}
 
-	router.WithFailFast(false)
-	rr2 := router.Route(context.Background(), raw)
-	if rr2.HandlerResult.Error != nil && rr2.HandlerResult.ShouldDelete {
-		t.Fatalf("fail-fast false expected not force delete")
+func TestMiddlewareErrorRespectsHandlerRetry(t *testing.T) {
+	router, err := NewRouter(EnvelopeSchema)
+	if err != nil {
+		t.Fatalf("new router: %v", err)
+	}
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) HandlerResult {
+		return HandlerResult{ShouldDelete: false, Error: errors.New("transient")}
+	})
+
+	errMW := func(next HandlerFunc) HandlerFunc {
+		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+			rr, _ := next(ctx, s)
+			return rr, errors.New("mw error")
+		}
+	}
+	router.Use(errMW)
+
+	raw := []byte(`{"schemaVersion":"1.0","messageType":"T","messageVersion":"v1","message":{},"metadata":{}}`)
+	rr := router.Route(context.Background(), raw)
+
+	if rr.HandlerResult.Error == nil {
+		t.Fatalf("expected error present")
+	}
+	if rr.HandlerResult.ShouldDelete {
+		t.Fatalf("default policy should not force delete on middleware error when handler asks retry")
 	}
 }
 

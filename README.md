@@ -101,11 +101,14 @@ mws := []sqsrouter.Middleware{TracingMW(), LoggingMW(), MetricsMW()}
 router.Use(mws...)
 ```
 
-Control behavior on middleware errors:
+Decision policy:
 
 ```go
-router.WithFailFast(true)  // map middleware error to delete=true
-router.WithFailFast(false) // keep RoutedResult as returned by chain
+// Use default DLQ-friendly policy
+router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
+
+// Or provide a custom policy
+router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
 ```
 
 Middlewares run even if no handler is registered, so you can log/measure such cases.

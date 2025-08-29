@@ -114,7 +114,7 @@ func main() {
 - ShouldDelete=false for transient failures (allow retry when visibility timeout expires).
 - Error is attached on failure; nil means success.
 
-Middleware
+## Middleware
 
 Register middlewares to wrap the routing pipeline:
 ```go

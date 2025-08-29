@@ -1,229 +1,127 @@
- # Middleware
- 
- Router supports a middleware chain around the Route pipeline.
+AGENTS.md — sqsrouter Codebase Guide
 
-API:
-- type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
-- type Middleware func(next HandlerFunc) HandlerFunc
-- func (r *Router) Use(mw ...Middleware)
+Purpose
+A concise, automation-friendly guide for AI agents and tooling to understand, navigate, and operate the sqsrouter repository.
 
-Behavior:
-- Middlewares run in registration order and wrap the core routing steps.
-- Middlewares can read RouteState and modify the returned RoutedResult.
-- Middlewares execute even if no handler is registered.
-- Final ShouldDelete/Error is decided by Policy (default policy.ImmediateDeletePolicy). Middleware and handler errors do not force delete by default; default policy respects the handler's decision.
-# AGENTS.md — sqsrouter guide
+Repository
+- URL: https://github.com/HatsuneMiku3939/sqsrouter
+- Language: Go
+- Module: github.com/hatsunemiku3939/sqsrouter
+- CI: .github/workflows/test.yaml (gomod, unit, lint, e2e, examples)
 
-This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
+Core Components
+- Router: Validates envelope, optionally validates payload, dispatches to a handler, applies Policy to produce a RoutedResult.
+- Consumer: Polls SQS via long polling, invokes Router for each message, deletes message only if RoutedResult.ShouldDelete is true.
+- Policy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy).
+- Middleware: Wraps the routing pipeline to add cross-cutting behavior.
 
-- Repository: github.com/HatsuneMiku3939/sqsrouter
-- Core components: Consumer(SQS polling/deletion), Router(validation/dispatch), Handler(user-defined logic)
-
-## 1) Overview
-- Purpose: Route JSON messages pulled from AWS SQS to handlers by message type/version and validate them with JSON Schemas, providing a consistent processing pipeline.
-- Benefits
-  - Standardized routing rules and schema validation
-  - Clear failure/retry/delete policy
-  - Built-in patterns for concurrency, timeouts, and graceful shutdown
-
-## 2) Architecture
-Pipeline flow:
-- Consumer: Receives message batches via SQS Long Polling → processes each message in its own goroutine
-- Router: Validates the envelope → finds the handler → optionally validates payload against a registered schema → runs the handler → returns a RoutedResult via Policy
-- Handler: Executes business logic and returns a HandlerResult (delete decision and error)
-
-Key types:
-- Exported public types are defined in types.go
-- Consumer: consumer.NewConsumer(client, queueURL, router).Start(ctx)
-- Router: NewRouter(envelopeSchema).Register(type, version, handler).RegisterSchema(type, version, schema).Route(ctx, raw)
-
-## 3) Message format and schema
-The envelope is the basis for routing and validation.
-
+Message Envelope
 ```json
 {
   "schemaVersion": "1.0",
   "messageType": "UserCreated",
   "messageVersion": "v1",
   "message": { "userId": "123", "name": "Alice" },
-  "metadata": { "timestamp": "2024-01-01T00:00:00Z", "source": "svcA", "messageId": "uuid-..." }
+  "metadata": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "source": "svcA",
+    "messageId": "uuid-..."
+  }
 }
 ```
 
-Envelope schema (excerpt from code):
+Key Types and APIs
+- types.go
+  - type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
+  - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
+  - type Middleware func(next HandlerFunc) HandlerFunc
+  - type Router struct { ... }
+  - type HandlerResult { ShouldDelete bool; Error error }
+  - type RoutedResult { MessageType, MessageVersion string; HandlerResult; MessageID, Timestamp string }
+- router.go
+  - func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error)
+  - func (r *Router) Register(messageType, messageVersion string, handler MessageHandler)
+  - func (r *Router) RegisterSchema(messageType, messageVersion string, schema string) error
+  - func (r *Router) Use(mw ...Middleware)
+  - func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult
+  - EnvelopeSchema (JSON Schema for envelope)
+- consumer/consumer.go
+  - type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }
+  - func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer
+  - func (c *Consumer) Start(ctx context.Context)
+- policy/
+  - type FailureKind (FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerError, FailHandlerPanic, FailMiddlewareError)
+  - type Result { ShouldDelete bool; Error error }
+  - type Policy interface { Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result }
+  - ImmediateDeletePolicy: delete on structural/permanent failures; preserve handler intent on handler/middleware errors
+  - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
 
-```go
-var EnvelopeSchema = `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "schemaVersion": { "type": "string" },
-    "messageType": { "type": "string" },
-    "messageVersion": { "type": "string" },
-    "message": { "type": "object" },
-    "metadata": { "type": "object" }
-  },
-  "required": ["schemaVersion", "messageType", "messageVersion", "message", "metadata"]
-}`
+Routing Pipeline (high level)
+1) Validate envelope against EnvelopeSchema.
+2) Unmarshal envelope; derive key = messageType:messageVersion.
+3) Resolve handler and optional payload schema.
+4) If schema exists, validate payload.
+5) Prepare metadata JSON and call handler(message, metadata).
+6) If handler error, consult Policy; else success.
+7) Middlewares wrap the core; outer guard maps panics to FailHandlerPanic via Policy.
+
+Consumer Lifecycle
+- Long polls ReceiveMessage(maxMessages=5, waitTimeSeconds=10).
+- Each message processed in its own goroutine with processingTimeout=30s.
+- On RoutedResult.ShouldDelete=true, DeleteMessage with deleteTimeout=5s.
+- On false, message is left for retry (visibility timeout expiry).
+- Graceful shutdown via context cancellation; waits for in-flight messages.
+
+Examples
+- example/basic/main.go: Registers handler and payload schema for "updateUserProfile" v1.0, starts Consumer.
+- test/e2e/: Minimal app and script to run against LocalStack.
+
+Common Operations
+
+Run unit tests
+```bash
+make test
 ```
 
-- metadata.timestamp/messageId are great for log correlation.
-- Even if metadata parsing fails, the message processing continues with a warning log.
-
-## 4) Router usage
-```go
-// Create router with envelope schema (uses default policy.ImmediateDeletePolicy)
-router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-// Or provide a custom policy (import "github.com/hatsunemiku3939/sqsrouter/policy"):
-// router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
-if err != nil {
-    panic(err) // (Do not panic in production; handle errors properly.)
-}
-
-// Register handler
-router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) sqsrouter.HandlerResult {
-    // Parse msgJSON to struct and process
-    // return ShouldDelete=true for permanent outcomes; false to retry
-    return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
-})
-
-// (Optional) Register payload schema for validation
-router.RegisterSchema("UserCreated", "v1", `{
-  "$schema":"http://json-schema.org/draft-07/schema#",
-  "type":"object",
-  "properties":{ "userId":{"type":"string"}, "name":{"type":"string"} },
-  "required":["userId","name"]
-}`)
+Run linters
+```bash
+make lint
 ```
 
-Route flow:
-1) Validate envelope (invalid structure → permanent failure → delete)
-- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is policy.ImmediateDeletePolicy.
-2) Unmarshal envelope
-3) Lookup handler (missing handler → permanent failure → delete)
-4) Validate payload schema if registered (invalid → delete)
-5) Parse metadata (failure only warns)
-6) Run handler → collect HandlerResult → if error, consult Policy
-
-Contract:
-- HandlerResult.ShouldDelete
-  - true: consider processing complete (success or permanent failure) → delete
-  - false: treat as transient error → do not delete (will be retried after visibility timeout)
-- HandlerResult.Error
-  - nil: success
-  - non-nil: failure (logged; delete or retry per ShouldDelete)
-
-## 5) Consumer usage
-Key constants:
-- maxMessages=5, waitTimeSeconds=10 (Long Polling), processingTimeout=30s, deleteTimeout=5s, retrySleep=2s
-
-```go
-// Build AWS SQS client (aws-sdk-go-v2) and create Consumer
-client := sqs.NewFromConfig(cfg)
-c := consumer.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
-
-// Start polling (blocking until ctx canceled)
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
-c.Start(ctx)
+Run end-to-end test (LocalStack)
+```bash
+make e2e-test
 ```
 
-Processing/deletion logic:
-- If HandlerResult.ShouldDelete is true, Consumer calls DeleteMessage
-- If false, it leaves the message for retry (after visibility timeout)
-
-Graceful shutdown:
-- Start loop stops polling on ctx cancellation
-- Waits for in-flight goroutines to finish
-
-## 6) Quick start example
-Use example/basic for the fastest start.
-
-Path: example/basic/main.go
-
-```go
-// Pseudocode summary (refer to the real example in the repo)
-// Default policy:
-router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-// Or custom policy (import policy):
-// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
-router.Register("UserCreated", "v1", userCreatedHandler)
-router.RegisterSchema("UserCreated", "v1", userCreatedSchemaJSON)
-
-client := sqs.NewFromConfig(cfg)
-c := consumer.NewConsumer(client, queueURL, router)
-c.Start(ctx)
+Troubleshooting
+- Reconcile module state:
+```bash
+go mod tidy
 ```
+- If messages are not being deleted, check:
+  - HandlerResult.ShouldDelete is true for successful/permanent outcomes
+  - Selected Policy (ImmediateDeletePolicy vs SQSRedrivePolicy)
+  - Consumer DeleteMessage errors in logs
 
-For local e2e testing, see test/docker-compose.yaml and test/e2e.sh. You can use LocalStack to emulate SQS.
+Operational Guidance
+- Configure SQS visibility timeout above worst-case processing time.
+- Use DLQ with appropriate maxReceiveCount for stuck messages.
+- Emit logs with timestamp/messageId/type/version for correlation.
+- Consider idempotency for side-effecting handlers.
 
-## 7) Operations guide
-Concurrency/timeouts:
-- maxMessages: messages per poll; balance throughput vs memory
-- waitTimeSeconds: long polling duration; reduces cost/empty responses
-- processingTimeout: cap for handler processing time; keep below container termination grace period
-- deleteTimeout: timeout for DeleteMessage API call
-- Consider SQS Visibility Timeout vs processingTimeout when configuring
+Extending
+- New Policy: implement Policy.Decide and pass with WithPolicy(...) when creating Router.
+- New Middleware: implement Middleware and register via router.Use(...).
+- New Handlers: router.Register("Type", "Version", handler) and (optionally) RegisterSchema.
 
-Failure handling:
-- Permanent failures (e.g., invalid payload schema, missing handler): ShouldDelete=true → delete. Configure a DLQ and monitor it
-- Transient errors (e.g., temporary dependency outage): ShouldDelete=false → retry. Set up metrics/alerts to avoid retry storms
+Security
+- Minimal AWS IAM permissions: ReceiveMessage, DeleteMessage for the queue.
+- Ensure encryption/KMS and data handling policies for sensitive payloads.
 
-Logging/observability:
-- Success/failure logs include Timestamp/MessageID/Type/Version for easy traceability
-- If metadata parsing fails, processing continues. Make metadata required via schema if needed
+Notes for Automation
+- Route returns a concrete RoutedResult (no error); failures are encoded in HandlerResult.Error and ShouldDelete after Policy.Decide.
+- Middleware errors are mapped via Policy once.
+- Panics are caught at the outer guard and mapped to FailHandlerPanic.
 
-Security/IAM:
-- Grant minimal SQS permissions (ReceiveMessage/DeleteMessage)
-- If messages contain sensitive data, verify encryption/KMS policies
-
-## 8) Testing/CI
-### Failure Policy Options
-
-- policy.ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). For handler or middleware errors, attaches the error and preserves ShouldDelete as decided by the handler.
-- policy.SQSRedrivePolicy: For any failure kind, sets ShouldDelete=false so the consumer does not delete the message. Retries and DLQ routing are fully delegated to the SQS redrive policy.
-
-Usage:
-
-```go
-// Default behavior:
-// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-
-// Delegate all failure handling to SQS redrive:
-router, _ := sqsrouter.NewRouter(
-    sqsrouter.EnvelopeSchema,
-    sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
-)
-```
-
-Operational note:
-- Ensure your SQS queue has an appropriate redrive policy (dead-letter queue + maxReceiveCount) so permanently failing messages eventually land in the DLQ for analysis.
-
-- Unit tests: consumer_test.go, router_test.go
-- e2e: test/e2e.sh, test/docker-compose.yaml
-- GitHub Actions runs lint/test/e2e; documentation-only changes should have minimal impact
-
-If you hit local dependency issues:
-- Try go mod tidy to reconcile module state.
-
-## 9) Extensions and best practices
-- Message type/version strategy: routing key is messageType+messageVersion. For upgrades, add new Register/Schema pairs and migrate gradually
-- Schema evolution: keep required minimal early; prefer backward-compatible changes
-- Idempotency: use an idempotency key for side effects (e.g., DB writes) to handle duplicates safely
-- Tracing: use messageId as a correlation/trace identifier
-
-## 10) FAQ
-- What if no handler is registered?
-  - Missing type:version is a permanent failure and will be deleted with an error log
-- What if metadata parsing fails?
-  - Only a warning is logged; processing continues
-- How do retries work?
-  - If ShouldDelete=false, the message is not deleted; after visibility timeout it will be received again by the consumer
-
-## 11) References
-- Public types: types.go
-- Router/Schema/Route: router.go
-- Consumer/Start/processMessage: consumer/consumer.go
-- Example: example/basic/main.go
-- Tests: consumer_test.go, router_test.go
-- e2e: test/e2e.sh, test/docker-compose.yaml
+Attribution
+Originally written and maintained by contributors and Devin, with updates from the core team.

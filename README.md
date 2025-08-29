@@ -1,51 +1,45 @@
 # sqsrouter
 
-A lightweight Go library to route and process Amazon SQS messages by type and version with optional JSON Schema validation.
+A production-ready Go library to route and process Amazon SQS messages by type and version, with optional JSON Schema validation and pluggable failure policies.
 
 [![CI](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml/badge.svg)](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> ⚠️ **Warning**  
-> This library is under active development.  
-> Interfaces, features, and behaviors may change frequently without prior notice.  
-> Use with caution in production environments.
+- Message routing by messageType and messageVersion
+- Optional JSON Schema validation per type/version
+- Composable middleware chain
+- Clear delete vs retry contract via Policy and handler results
+- Concurrent processing, timeouts, and graceful shutdown
 
-## Table of Contents
+Table of Contents
 - Overview
-- Features
 - Quick Start
+- Usage
+- Middleware
+- Failure Policies
 - Project Structure
-- Requirements and Compatibility
+- Requirements
 - Local E2E Testing
 - Development
 - Contributing
 - License
-- Acknowledgments
+- Attribution
 
-## Overview
-sqsrouter helps Go developers build message-driven apps on SQS. It abstracts long polling, routing, validation, and lifecycle handling so you can focus on business logic.
+Overview
+sqsrouter abstracts SQS long polling, message routing, schema validation, and lifecycle handling so teams can focus on business logic instead of plumbing.
 
-## Features
-- Route messages by messageType and messageVersion
-- Optional JSON Schema validation per type/version
-- Middleware chain around routing with optional fail-fast
-- Concurrent processing, timeouts, and graceful shutdown
-- Clear delete vs. retry contract via handler results
-- Simple, testable design
-
-## Quick Start
+Quick Start
 
 Install
-- This is a Go module; dependencies are resolved by `go mod`.
+This is a Go module. Use Go 1.24.x and standard tooling.
 
-Define a router and register handlers
+Minimal router and handler
 ```go
 package main
 
 import (
   "context"
   "github.com/hatsunemiku3939/sqsrouter"
-  "github.com/hatsunemiku3939/sqsrouter/consumer"
 )
 
 func main() {
@@ -55,7 +49,7 @@ func main() {
   }
 
   router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) sqsrouter.HandlerResult {
-    // parse and process msgJSON, use metaJSON if needed
+    // parse and process msgJSON; metaJSON contains envelope metadata
     return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
   })
 
@@ -80,12 +74,12 @@ import (
   "github.com/aws/aws-sdk-go-v2/config"
   "github.com/aws/aws-sdk-go-v2/service/sqs"
   "github.com/hatsunemiku3939/sqsrouter"
+  "github.com/hatsunemiku3939/sqsrouter/consumer"
 )
 
 func main() {
   cfg, err := config.LoadDefaultConfig(context.Background())
   if err != nil { panic(err) }
-
   client := sqs.NewFromConfig(cfg)
 
   router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
@@ -93,120 +87,123 @@ func main() {
 
   c := consumer.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
   ctx := context.Background()
-  c.Start(ctx) // blocks; cancel ctx to stop
+  c.Start(ctx) // blocks until ctx is canceled
 }
 ```
-## Middleware
+
+Usage
+
+Message envelope used for routing
+```json
+{
+  "schemaVersion": "1.0",
+  "messageType": "UserCreated",
+  "messageVersion": "v1",
+  "message": { "userId": "123", "name": "Alice" },
+  "metadata": { "timestamp": "2024-01-01T00:00:00Z", "source": "svcA", "messageId": "uuid-..." }
+}
+```
+
+Handler contract
+- ShouldDelete=true for success or permanent failures (do not retry).
+- ShouldDelete=false for transient failures (allow retry when visibility timeout expires).
+- Error is attached on failure; nil means success.
+
+Middleware
 
 Register middlewares to wrap the routing pipeline:
-
 ```go
 router.Use(TracingMW(), LoggingMW(), MetricsMW())
-// or
+
 mws := []sqsrouter.Middleware{TracingMW(), LoggingMW(), MetricsMW()}
 router.Use(mws...)
 ```
 
-Decision policy:
+- Middlewares run in registration order and wrap core routing.
+- Middlewares can read RouteState and adjust RoutedResult.
+- Middlewares run even when a handler is not registered.
+
+Failure Policies
+
+Default: ImmediateDeletePolicy
+- Deletes on structural/permanent failures:
+  - Invalid envelope schema, envelope parse failure
+  - Invalid payload schema
+  - No handler registered
+  - Handler panic
+- Preserves handler intent for HandlerError or MiddlewareError.
 
 ```go
-// Use default policy.ImmediateDeletePolicy (immediate deletion for permanent errors)
-router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-
-// Or provide a custom policy (implement policy.Policy)
 // import "github.com/hatsunemiku3939/sqsrouter/policy"
-router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
-```
-
-### Failure Policy
-
-By default, the router uses policy.ImmediateDeletePolicy which immediately deletes messages for structural/permanent failures (invalid envelope/payload, no handler, panics). For handler and middleware errors, it attaches the error and respects the handler's `ShouldDelete` decision.
-
-If you prefer delegating all failures to SQS redrive so every failed message is retried per queue settings and eventually goes to the DLQ, use policy.SQSRedrivePolicy:
-
-```go
-// Delegate all failures to SQS redrive (no immediate deletes by the consumer)
 router, _ := sqsrouter.NewRouter(
-    sqsrouter.EnvelopeSchema,
-    sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
+  sqsrouter.EnvelopeSchema,
+  sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}),
 )
 ```
 
-- policy.ImmediateDeletePolicy: fail-fast deletes on permanent/structural errors.
-- policy.SQSRedrivePolicy: never deletes on failures; SQS manages retries and DLQ routing.
+Alternative: SQSRedrivePolicy
+- Never deletes on failures; retries and DLQ routing are delegated to SQS redrive.
 
-All failures (including handler errors) are routed through the Policy, so you can centralize delete vs. retry decisions. The default behavior preserves handler intent; custom policies can override it.
+```go
+router, _ := sqsrouter.NewRouter(
+  sqsrouter.EnvelopeSchema,
+  sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
+)
+```
 
-Middlewares run even if no handler is registered, so you can log/measure such cases.
-
-Example app
-- See example/basic for a runnable example.
-
-## Project Structure
+Project Structure
 ```
 sqsrouter/
 ├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
-├── policy/                     # Failure policy types and implementations
-├── internal/jsonschema/        # Wrapper over gojsonschema for validation
+├── policy/                     # Failure policy definitions and implementations
+├── internal/jsonschema/        # JSON schema validation utilities
 ├── router.go                   # Routing by type/version, schema validation, handler registry
-├── types.go                    # Public types (router, handlers, middleware)
+├── types.go                    # Public types and interfaces
 ├── example/
 │   └── basic/                  # Minimal runnable example
 ├── test/
 │   ├── docker-compose.yaml     # LocalStack for SQS
 │   ├── e2e.sh                  # End-to-end test runner
 │   └── e2e/                    # E2E test application
-├── .github/workflows/test.yaml # CI: lint, unit, e2e
-├── .golangci.yml               # Lint configuration
-├── Makefile                    # Common dev tasks
-└── LICENSE
+└── .github/workflows/test.yaml # CI: lint, unit, e2e
 ```
 
-## Requirements and Compatibility
-- Go: module declares `go 1.24`; use a current stable Go toolchain
-- Dependencies:
-  - AWS SDK for Go v2
-  - gojsonschema for JSON Schema validation
-- Production note: Set SQS visibility timeout to exceed worst-case processing time.
+Requirements
+- Go: 1.24.x (see go.mod)
+- AWS SDK for Go v2
+- gojsonschema
+- Set SQS visibility timeout above worst-case processing time; use DLQ + redrive policy in production.
 
-Breaking changes will be called out in releases.
-
-## Local E2E Testing
-Prerequisites: Docker, Docker Compose
-
-Run:
+Local E2E Testing
+Requires Docker and Docker Compose.
 ```bash
 make e2e-test
 ```
-This starts LocalStack, runs the test app, publishes a test message, and verifies success via logs.
+This starts LocalStack, runs a test app, publishes a test message, and verifies via logs.
 
-## Development
-Common tasks:
+Development
 ```bash
-make test              # run unit tests
-make lint              # run linters (golangci-lint)
-make e2e-test          # run end-to-end tests with LocalStack
+make test              # unit tests
+make lint              # golangci-lint
+make e2e-test          # end-to-end test with LocalStack
 ```
-
-Tips:
-- If you see missing go.sum entries, run:
+If dependencies drift:
 ```bash
 go mod tidy
 ```
-- Filter tests:
+Filter tests:
 ```bash
 make test TESTARGS="-run=MyTest"
 ```
 
-## Contributing
-Issues and PRs are welcome.
-- Keep changes focused
-- Add tests when possible
+Contributing
+- Issues and PRs welcome
+- Keep changes focused and add tests when possible
 - Run lint and tests before submitting
-- For larger API/behavior changes, open an issue for discussion first
+- Discuss larger API changes in an issue first
 
-## License
+License
 MIT. See LICENSE.
 
-## Acknowledgments
-Originally written and maintained by contributors and Devin, with updates from the core team. Initial development supported by Google Gemini.
+Attribution
+Originally written and maintained by contributors and Devin, with updates from the core team.

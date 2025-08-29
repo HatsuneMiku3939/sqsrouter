@@ -20,7 +20,7 @@ func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
-		policy:         DLQDefaultPolicy{},
+		policy:         ImmediateDeletePolicy{},
 	}
 	for _, opt := range opts {
 		opt(r)

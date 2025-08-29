@@ -11,7 +11,7 @@ Behavior:
 - Middlewares run in registration order and wrap the core routing steps.
 - Middlewares can read RouteState and modify the returned RoutedResult.
 - Middlewares execute even if no handler is registered.
-- Final ShouldDelete/Error is decided by Policy (default DLQDefaultPolicy); middleware errors do not force delete by default.
+- Final ShouldDelete/Error is decided by Policy (default ImmediateDeletePolicy); middleware errors do not force delete by default.
 # agents.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
@@ -72,7 +72,7 @@ var EnvelopeSchema = `{
 
 ## 4) Router usage
 ```go
-// Create router with envelope schema (uses default DLQDefaultPolicy)
+// Create router with envelope schema (uses default ImmediateDeletePolicy)
 router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 // Or provide a custom policy:
 // router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
@@ -98,7 +98,7 @@ router.RegisterSchema("UserCreated", "v1", `{
 
 Route flow:
 1) Validate envelope (invalid structure → permanent failure → delete)
-- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is DLQDefaultPolicy.
+- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is ImmediateDeletePolicy.
 2) Unmarshal envelope
 3) Lookup handler (missing handler → permanent failure → delete)
 4) Validate payload schema if registered (invalid → delete)

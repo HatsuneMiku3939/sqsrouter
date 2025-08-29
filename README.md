@@ -104,7 +104,7 @@ router.Use(mws...)
 Decision policy:
 
 ```go
-// Use default DLQ-friendly policy
+// Use default ImmediateDeletePolicy (immediate deletion for permanent errors)
 router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 
 // Or provide a custom policy

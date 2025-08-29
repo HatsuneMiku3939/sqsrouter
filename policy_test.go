@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestDLQDefaultPolicy_Decide(t *testing.T) {
-	p := DLQDefaultPolicy{}
+func TestImmediateDeletePolicy_Decide(t *testing.T) {
+	p := ImmediateDeletePolicy{}
 	ctx := context.Background()
 	st := &RouteState{}
 
@@ -79,8 +79,8 @@ func TestWithPolicy_SetsRouterPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouter err: %v", err)
 	}
-	if _, ok := r.policy.(DLQDefaultPolicy); !ok {
-		t.Fatalf("expected default policy DLQDefaultPolicy")
+	if _, ok := r.policy.(ImmediateDeletePolicy); !ok {
+		t.Fatalf("expected default policy ImmediateDeletePolicy")
 	}
 
 	custom := &testPolicy{}

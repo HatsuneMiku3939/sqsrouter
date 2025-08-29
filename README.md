@@ -131,8 +131,6 @@ router, _ := sqsrouter.NewRouter(
 - ImmediateDeletePolicy: fail-fast deletes on permanent/structural errors.
 - SQSRedrivePolicy: never deletes on failures; SQS manages retries and DLQ routing.
 
-```
-
 Middlewares run even if no handler is registered, so you can log/measure such cases.
 
 

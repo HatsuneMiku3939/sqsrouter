@@ -7,23 +7,23 @@ import (
 type FailureKind int
 
 const (
-    // FailNone indicates no failure occurred.
-    FailNone FailureKind = iota
+	// FailNone indicates no failure occurred.
+	FailNone FailureKind = iota
 	// FailEnvelopeSchema indicates the outer envelope JSON failed schema validation. (important-comment)
 	FailEnvelopeSchema
 	// FailEnvelopeParse indicates the outer envelope JSON could not be parsed at all.
 	FailEnvelopeParse
 	// FailPayloadSchema indicates the inner message payload failed its registered schema validation.
 	FailPayloadSchema
-    // FailNoHandler indicates no handler was registered for the message type/version.
-    FailNoHandler
-    // FailHandlerError indicates the user handler returned a non-nil error.
-    // Policy may choose to respect or override the handler's ShouldDelete decision.
-    FailHandlerError
-    // FailHandlerPanic indicates a panic occurred inside user handler or outer recovery.
-    FailHandlerPanic
-    // FailMiddlewareError indicates an error was returned by the middleware-wrapped core pipeline.
-    FailMiddlewareError
+	// FailNoHandler indicates no handler was registered for the message type/version.
+	FailNoHandler
+	// FailHandlerError indicates the user handler returned a non-nil error.
+	// Policy may choose to respect or override the handler's ShouldDelete decision.
+	FailHandlerError
+	// FailHandlerPanic indicates a panic occurred inside user handler or outer recovery.
+	FailHandlerPanic
+	// FailMiddlewareError indicates an error was returned by the middleware-wrapped core pipeline.
+	FailMiddlewareError
 )
 
 type Policy interface {
@@ -53,23 +53,23 @@ type ImmediateDeletePolicy struct{}
 // - For structural/permanent failures, mark ShouldDelete=true and attach inner error if not already present.
 // - For middleware errors, preserve ShouldDelete as-is (typically false) and attach inner error if missing.
 func (p ImmediateDeletePolicy) Decide(_ context.Context, _ *RouteState, kind FailureKind, inner error, rr RoutedResult) RoutedResult {
-    switch kind {
-    case FailNone:
-        return rr
-    case FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerPanic:
-        rr.HandlerResult.ShouldDelete = true
-        if inner != nil && rr.HandlerResult.Error == nil {
-            rr.HandlerResult.Error = inner
-        }
-        return rr
-    case FailMiddlewareError, FailHandlerError:
-        if inner != nil && rr.HandlerResult.Error == nil {
-            rr.HandlerResult.Error = inner
-        }
-        return rr
-    default:
-        return rr
-    }
+	switch kind {
+	case FailNone:
+		return rr
+	case FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerPanic:
+		rr.HandlerResult.ShouldDelete = true
+		if inner != nil && rr.HandlerResult.Error == nil {
+			rr.HandlerResult.Error = inner
+		}
+		return rr
+	case FailMiddlewareError, FailHandlerError:
+		if inner != nil && rr.HandlerResult.Error == nil {
+			rr.HandlerResult.Error = inner
+		}
+		return rr
+	default:
+		return rr
+	}
 }
 
 // SQSRedrivePolicy delegates failure handling to SQS redrive.

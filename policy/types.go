@@ -1,8 +1,6 @@
 package policy
 
-import (
-	"context"
-)
+import "context"
 
 // FailureKind enumerates where in the pipeline a failure occurred.
 type FailureKind int
@@ -36,44 +34,4 @@ type Result struct {
 // Policy decides the final Result given a failure classification and current decision.
 type Policy interface {
 	Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result
-}
-
-// ImmediateDeletePolicy marks structural/permanent failures for deletion immediately.
-// Middleware errors do not force deletion; handler semantics are preserved.
-type ImmediateDeletePolicy struct{}
-
-// Decide implements ImmediateDeletePolicy behavior.
-func (p ImmediateDeletePolicy) Decide(_ context.Context, kind FailureKind, inner error, current Result) Result {
-	switch kind {
-	case FailNone:
-		return current
-	case FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerPanic:
-		current.ShouldDelete = true
-		if inner != nil && current.Error == nil {
-			current.Error = inner
-		}
-		return current
-	case FailMiddlewareError, FailHandlerError:
-		if inner != nil && current.Error == nil {
-			current.Error = inner
-		}
-		return current
-	default:
-		return current
-	}
-}
-
-// SQSRedrivePolicy always returns ShouldDelete=false for failures so SQS redrive handles retries/DLQ.
-type SQSRedrivePolicy struct{}
-
-// Decide implements the Policy interface for SQS redrive delegation.
-func (p SQSRedrivePolicy) Decide(_ context.Context, kind FailureKind, inner error, current Result) Result {
-	if kind == FailNone {
-		return current
-	}
-	current.ShouldDelete = false
-	if inner != nil && current.Error == nil {
-		current.Error = inner
-	}
-	return current
 }

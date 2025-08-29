@@ -40,17 +40,16 @@ func WithPolicy(p Policy) RouterOption {
 	}
 }
 
-// DLQDefaultPolicy is the built-in default policy designed to be DLQ-friendly.
 // Behavior:
-// - Structural/permanent failures (envelope schema/parse, payload schema, no handler, handler panic) => delete.
+// - Structural/permanent failures (envelope schema/parse, payload schema, no handler, handler panic) => delete immediately.
 // - Middleware errors => do not force delete; allow retry to respect handler semantics.
-type DLQDefaultPolicy struct{}
+type ImmediateDeletePolicy struct{}
 
 // Decide implements the default policy described above.
 // Key decisions:
 // - For structural/permanent failures, mark ShouldDelete=true and attach inner error if not already present.
 // - For middleware errors, preserve ShouldDelete as-is (typically false) and attach inner error if missing.
-func (p DLQDefaultPolicy) Decide(_ context.Context, _ *RouteState, kind FailureKind, inner error, rr RoutedResult) RoutedResult {
+func (p ImmediateDeletePolicy) Decide(_ context.Context, _ *RouteState, kind FailureKind, inner error, rr RoutedResult) RoutedResult {
 	switch kind {
 	case FailNone:
 		return rr

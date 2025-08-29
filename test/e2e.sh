@@ -24,7 +24,7 @@ cleanup() {
   if [ ! -z "$APP_PID" ]; then
     kill "$APP_PID" 2>/dev/null || true
   fi
-  sudo docker compose -f "$DOCKER_COMPOSE_FILE" down -v
+  docker compose -f "$DOCKER_COMPOSE_FILE" down -v
   rm -f "$APP_LOG_FILE"
 }
 trap cleanup EXIT
@@ -87,7 +87,7 @@ echo "--- Starting e2e test ---"
 
 # 1) Start LocalStack
 echo "--- Starting LocalStack container ---"
-sudo docker compose -f "$DOCKER_COMPOSE_FILE" up -d
+docker compose -f "$DOCKER_COMPOSE_FILE" up -d
 
 echo "--- Waiting for SQS service to be available ---"
 SQS_WAIT_TIMEOUT="${SQS_WAIT_TIMEOUT:-60}"
@@ -107,7 +107,7 @@ if [ "$SQS_READY" -ne 1 ]; then
   echo
   echo "❌ Timeout waiting for SQS to become ready after ${SQS_WAIT_TIMEOUT}s."
   echo "--- docker logs (last 100 lines) ---"
-  sudo docker compose -f "$DOCKER_COMPOSE_FILE" logs --tail 100 || true
+  docker compose -f "$DOCKER_COMPOSE_FILE" logs --tail 100 || true
   exit 1
 fi
 echo " SQS is ready."

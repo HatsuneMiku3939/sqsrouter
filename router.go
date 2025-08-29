@@ -3,10 +3,30 @@ package sqsrouter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/hatsunemiku3939/sqsrouter/pkg/jsonschema"
 )
+
+// coreFailureErr is used to propagate a failure signal through middlewares
+// while avoiding double policy application in Route. It wraps the original cause
+// and tags it with the FailureKind.
+type coreFailureErr struct {
+	kind  FailureKind
+	cause error
+}
+
+// Error implements error interface.
+func (e coreFailureErr) Error() string {
+	if e.cause != nil {
+		return e.cause.Error()
+	}
+	return "core failure"
+}
+
+// Unwrap returns the underlying error cause.
+func (e coreFailureErr) Unwrap() error { return e.cause }
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
@@ -78,8 +98,9 @@ func (r *Router) RegisterSchema(messageType, messageVersion string, schema strin
 //  4. If a schema exists, validate the message payload.
 //  5. Marshal metadata and invoke the resolved handler. (important-comment)
 //
-// It returns a RoutedResult and an error when validation or resolution fails.
-// The outer Route method interprets the error according to the fail-fast policy.
+// Behavior:
+//   - On failures within core routing, the Policy is consulted immediately and the decided RoutedResult is returned with a nil error.
+//   - Any panics from user handlers are not recovered here; they bubble up to the outer Route guard which maps them to FailHandlerPanic via Policy.
 func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult, error) {
 	// Step 1: Validate the envelope structure before any parsing.
 	res, err := jsonschema.Validate(r.envelopeSchema, jsonschema.NewBytesLoader(state.Raw))
@@ -92,7 +113,8 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				Error:        fmt.Errorf("%w: %v", ErrInvalidEnvelope, validationErr),
 			},
 		}
-		return r.policy.Decide(ctx, state, FailEnvelopeSchema, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
+		decided := r.policy.Decide(ctx, state, FailEnvelopeSchema, rr.HandlerResult.Error, rr)
+		return decided, coreFailureErr{kind: FailEnvelopeSchema, cause: rr.HandlerResult.Error}
 	}
 
 	// Step 2: Parse the envelope to extract routing metadata and payload.
@@ -106,7 +128,8 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				Error:        fmt.Errorf("%w: %v", ErrFailedToParseEnvelope, err),
 			},
 		}
-		return r.policy.Decide(ctx, state, FailEnvelopeParse, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
+		decided := r.policy.Decide(ctx, state, FailEnvelopeParse, rr.HandlerResult.Error, rr)
+		return decided, coreFailureErr{kind: FailEnvelopeParse, cause: rr.HandlerResult.Error}
 	}
 	state.Envelope = &envelope
 	state.HandlerKey = makeKey(envelope.MessageType, envelope.MessageVersion)
@@ -135,7 +158,8 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				MessageID: envelope.Metadata.MessageID,
 				Timestamp: envelope.Metadata.Timestamp,
 			}
-			return r.policy.Decide(ctx, state, FailPayloadSchema, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
+			decided := r.policy.Decide(ctx, state, FailPayloadSchema, rr.HandlerResult.Error, rr)
+			return decided, coreFailureErr{kind: FailPayloadSchema, cause: rr.HandlerResult.Error}
 		}
 	}
 
@@ -151,7 +175,8 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageID: envelope.Metadata.MessageID,
 			Timestamp: envelope.Metadata.Timestamp,
 		}
-		return r.policy.Decide(ctx, state, FailNoHandler, rr.HandlerResult.Error, rr), rr.HandlerResult.Error
+		decided := r.policy.Decide(ctx, state, FailNoHandler, rr.HandlerResult.Error, rr)
+		return decided, coreFailureErr{kind: FailNoHandler, cause: rr.HandlerResult.Error}
 	}
 
 	// Prepare metadata for the handler invocation.
@@ -171,23 +196,9 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		}
 		return rr, rr.HandlerResult.Error
 	}
-	// Protect handler invocation with panic recovery.
-	// Any panic raised by user-defined handlers will be recovered and converted into a HandlerResult (ShouldDelete=true).
-	// This ensures the router remains resilient and surfaces the failure through the normal error channel.
-
 	// Invoke the resolved handler with payload and metadata.
-	var handlerResult HandlerResult
-	func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				handlerResult = HandlerResult{
-					ShouldDelete: false,
-					Error:        fmt.Errorf("%w: %v", ErrPanic, rec),
-				}
-			}
-		}()
-		handlerResult = handler(ctx, envelope.Message, metaJSON)
-	}()
+	// Do not recover here; allow panics to bubble to Route, which maps them to FailHandlerPanic via Policy.
+	handlerResult := handler(ctx, envelope.Message, metaJSON)
 
 	// Assemble and return the final routed result.
 	rr := RoutedResult{
@@ -259,6 +270,12 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 	}()
 
 	if !panicOccurred && err != nil {
+		// If the error originated from coreRoute (already policy-decided), do not re-apply policy.
+		var cfe coreFailureErr
+		if errors.As(err, &cfe) {
+			return routed
+		}
+		// Else, treat as middleware error and consult policy once.
 		decided := r.policy.Decide(ctx, state, FailMiddlewareError, err, routed)
 		return decided
 	}

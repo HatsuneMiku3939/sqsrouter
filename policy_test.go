@@ -20,12 +20,12 @@ func TestImmediateDeletePolicy_Decide(t *testing.T) {
 	}
 
 	cases := []struct {
-		name        string
-		kind        FailureKind
-		innerErr    error
-		current     RoutedResult
-		wantDelete  bool
-		wantHasErr  bool
+		name       string
+		kind       FailureKind
+		innerErr   error
+		current    RoutedResult
+		wantDelete bool
+		wantHasErr bool
 	}{
 		{"FailNone_passthrough", FailNone, nil, base, false, false},
 		{"FailEnvelopeSchema_delete", FailEnvelopeSchema, errors.New("schema"), base, true, true},

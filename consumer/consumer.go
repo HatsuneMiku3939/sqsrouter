@@ -1,4 +1,4 @@
-package sqsrouter
+package consumer
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/hatsunemiku3939/sqsrouter"
 )
 
 // --- SQS Consumer Configuration ---
@@ -27,18 +28,29 @@ const (
 	retrySleep = 2 * time.Second
 )
 
+// SQSClient defines the interface for SQS operations needed by the Consumer.
+// This allows for easier testing by mocking the SQS client.
+type SQSClient interface {
+	ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error)
+	DeleteMessage(ctx context.Context, params *sqs.DeleteMessageInput, optFns ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
+}
+
+// Consumer encapsulates the SQS polling and message processing logic.
+type Consumer struct {
+	client   SQSClient
+	queueURL string
+	router   *sqsrouter.Router
+}
+
 // NewConsumer creates a new SQS message consumer.
-func NewConsumer(client SQSClient, queueURL string, router *Router) *Consumer {
-	return &Consumer{
-		client:   client,
-		queueURL: queueURL,
-		router:   router,
-	}
+func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer {
+	return &Consumer{client: client, queueURL: queueURL, router: router}
 }
 
 // Start begins the consumer's polling loop. It blocks until the context is canceled.
 func (c *Consumer) Start(ctx context.Context) {
 	log.Printf("🚀 SQS consumer started. Polling queue: %s. Press Ctrl+C to shut down.", c.queueURL)
+
 	var wg sync.WaitGroup
 
 	for {
@@ -71,13 +83,15 @@ func (c *Consumer) Start(ctx context.Context) {
 		log.Printf("INFO: Received %d messages.", len(output.Messages))
 
 		for _, msg := range output.Messages {
+			m := msg // capture range variable
+			// process each message in its own goroutine
 			wg.Add(1)
-			go func(m types.Message) { //nolint:contextcheck
+			go func(m sqstypes.Message) { //nolint:contextcheck
 				defer wg.Done()
 				msgCtx, cancelMsg := context.WithTimeout(context.Background(), processingTimeout)
 				defer cancelMsg()
 				c.processMessage(msgCtx, &m)
-			}(msg)
+			}(m)
 		}
 	}
 
@@ -86,11 +100,8 @@ func (c *Consumer) Start(ctx context.Context) {
 	log.Println("✅ Graceful shutdown complete. All processed messages are handled.")
 }
 
-// Per-message worker is guarded with panic recovery to prevent a single faulty message (handler/middleware)
-// from crashing the worker goroutine or impacting other messages. The failure is logged and the worker continues.
-
 // processMessage routes, handles, and deletes a single SQS message.
-func (c *Consumer) processMessage(ctx context.Context, msg *types.Message) {
+func (c *Consumer) processMessage(ctx context.Context, msg *sqstypes.Message) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.Printf("ERROR: Panic recovered while processing a message: %v", rec)

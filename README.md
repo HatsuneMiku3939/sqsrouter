@@ -45,6 +45,7 @@ package main
 import (
   "context"
   "github.com/hatsunemiku3939/sqsrouter"
+  "github.com/hatsunemiku3939/sqsrouter/consumer"
 )
 
 func main() {
@@ -90,9 +91,9 @@ func main() {
   router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
   if err != nil { panic(err) }
 
-  consumer := sqsrouter.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
+  c := consumer.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
   ctx := context.Background()
-  consumer.Start(ctx) // blocks; cancel ctx to stop
+  c.Start(ctx) // blocks; cancel ctx to stop
 }
 ```
 ## Middleware
@@ -109,29 +110,30 @@ router.Use(mws...)
 Decision policy:
 
 ```go
-// Use default ImmediateDeletePolicy (immediate deletion for permanent errors)
+// Use default policy.ImmediateDeletePolicy (immediate deletion for permanent errors)
 router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 
-// Or provide a custom policy
-router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
+// Or provide a custom policy (implement policy.Policy)
+// import "github.com/hatsunemiku3939/sqsrouter/policy"
+router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
 ```
 
 ### Failure Policy
 
-By default, the router uses ImmediateDeletePolicy which immediately deletes messages for structural/permanent failures (invalid envelope/payload, no handler, panics). For handler and middleware errors, it attaches the error and respects the handler's `ShouldDelete` decision.
+By default, the router uses policy.ImmediateDeletePolicy which immediately deletes messages for structural/permanent failures (invalid envelope/payload, no handler, panics). For handler and middleware errors, it attaches the error and respects the handler's `ShouldDelete` decision.
 
-If you prefer delegating all failures to SQS redrive so every failed message is retried per queue settings and eventually goes to the DLQ, use SQSRedrivePolicy:
+If you prefer delegating all failures to SQS redrive so every failed message is retried per queue settings and eventually goes to the DLQ, use policy.SQSRedrivePolicy:
 
 ```go
 // Delegate all failures to SQS redrive (no immediate deletes by the consumer)
 router, _ := sqsrouter.NewRouter(
     sqsrouter.EnvelopeSchema,
-    sqsrouter.WithPolicy(sqsrouter.SQSRedrivePolicy{}),
+    sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
 )
 ```
 
-- ImmediateDeletePolicy: fail-fast deletes on permanent/structural errors.
-- SQSRedrivePolicy: never deletes on failures; SQS manages retries and DLQ routing.
+- policy.ImmediateDeletePolicy: fail-fast deletes on permanent/structural errors.
+- policy.SQSRedrivePolicy: never deletes on failures; SQS manages retries and DLQ routing.
 
 All failures (including handler errors) are routed through the Policy, so you can centralize delete vs. retry decisions. The default behavior preserves handler intent; custom policies can override it.
 
@@ -143,9 +145,11 @@ Example app
 ## Project Structure
 ```
 sqsrouter/
-├── consumer.go                 # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
+├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
+├── policy/                     # Failure policy types and implementations
+├── internal/jsonschema/        # Wrapper over gojsonschema for validation
 ├── router.go                   # Routing by type/version, schema validation, handler registry
-├── types.go                    # All exported public types (structs, interfaces, function types)
+├── types.go                    # Public types (router, handlers, middleware)
 ├── example/
 │   └── basic/                  # Minimal runnable example
 ├── test/

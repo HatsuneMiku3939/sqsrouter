@@ -6,14 +6,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hatsunemiku3939/sqsrouter/pkg/jsonschema"
+	"github.com/hatsunemiku3939/sqsrouter/internal/jsonschema"
+	"github.com/hatsunemiku3939/sqsrouter/policy"
 )
 
 // coreFailureErr is used to propagate a failure signal through middlewares
 // while avoiding double policy application in Route. It wraps the original cause
 // and tags it with the FailureKind.
 type coreFailureErr struct {
-	kind  FailureKind
+	kind  policy.FailureKind
 	cause error
 }
 
@@ -40,7 +41,7 @@ func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
-		policy:         ImmediateDeletePolicy{},
+		policy:         policy.ImmediateDeletePolicy{},
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -113,8 +114,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				Error:        fmt.Errorf("%w: %v", ErrInvalidEnvelope, validationErr),
 			},
 		}
-		decided := r.policy.Decide(ctx, state, FailEnvelopeSchema, rr.HandlerResult.Error, rr)
-		return decided, coreFailureErr{kind: FailEnvelopeSchema, cause: rr.HandlerResult.Error}
+		pr := r.policy.Decide(ctx, policy.FailEnvelopeSchema, rr.HandlerResult.Error, policy.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+		rr.HandlerResult.ShouldDelete = pr.ShouldDelete
+		rr.HandlerResult.Error = pr.Error
+		return rr, coreFailureErr{kind: policy.FailEnvelopeSchema, cause: rr.HandlerResult.Error}
 	}
 
 	// Step 2: Parse the envelope to extract routing metadata and payload.
@@ -128,8 +131,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				Error:        fmt.Errorf("%w: %v", ErrFailedToParseEnvelope, err),
 			},
 		}
-		decided := r.policy.Decide(ctx, state, FailEnvelopeParse, rr.HandlerResult.Error, rr)
-		return decided, coreFailureErr{kind: FailEnvelopeParse, cause: rr.HandlerResult.Error}
+		pr := r.policy.Decide(ctx, policy.FailEnvelopeParse, rr.HandlerResult.Error, policy.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+		rr.HandlerResult.ShouldDelete = pr.ShouldDelete
+		rr.HandlerResult.Error = pr.Error
+		return rr, coreFailureErr{kind: policy.FailEnvelopeParse, cause: rr.HandlerResult.Error}
 	}
 	state.Envelope = &envelope
 	state.HandlerKey = makeKey(envelope.MessageType, envelope.MessageVersion)
@@ -158,8 +163,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 				MessageID: envelope.Metadata.MessageID,
 				Timestamp: envelope.Metadata.Timestamp,
 			}
-			decided := r.policy.Decide(ctx, state, FailPayloadSchema, rr.HandlerResult.Error, rr)
-			return decided, coreFailureErr{kind: FailPayloadSchema, cause: rr.HandlerResult.Error}
+			pr := r.policy.Decide(ctx, policy.FailPayloadSchema, rr.HandlerResult.Error, policy.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+			rr.HandlerResult.ShouldDelete = pr.ShouldDelete
+			rr.HandlerResult.Error = pr.Error
+			return rr, coreFailureErr{kind: policy.FailPayloadSchema, cause: rr.HandlerResult.Error}
 		}
 	}
 
@@ -175,8 +182,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 			MessageID: envelope.Metadata.MessageID,
 			Timestamp: envelope.Metadata.Timestamp,
 		}
-		decided := r.policy.Decide(ctx, state, FailNoHandler, rr.HandlerResult.Error, rr)
-		return decided, coreFailureErr{kind: FailNoHandler, cause: rr.HandlerResult.Error}
+		pr := r.policy.Decide(ctx, policy.FailNoHandler, rr.HandlerResult.Error, policy.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+		rr.HandlerResult.ShouldDelete = pr.ShouldDelete
+		rr.HandlerResult.Error = pr.Error
+		return rr, coreFailureErr{kind: policy.FailNoHandler, cause: rr.HandlerResult.Error}
 	}
 
 	// Prepare metadata for the handler invocation.
@@ -210,8 +219,10 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	}
 	// If handler returned an error, consult Policy so it can be the final decider.
 	if handlerResult.Error != nil {
-		decided := r.policy.Decide(ctx, state, FailHandlerError, handlerResult.Error, rr)
-		return decided, nil
+		pr := r.policy.Decide(ctx, policy.FailHandlerError, handlerResult.Error, policy.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+		rr.HandlerResult.ShouldDelete = pr.ShouldDelete
+		rr.HandlerResult.Error = pr.Error
+		return rr, nil
 	}
 	// No error: return as-is.
 	return rr, nil
@@ -263,8 +274,10 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 					Timestamp: timestamp,
 				}
 
-				decided := r.policy.Decide(ctx, state, FailHandlerPanic, tmp.HandlerResult.Error, tmp)
-				routed = decided
+				pr := r.policy.Decide(ctx, policy.FailHandlerPanic, tmp.HandlerResult.Error, policy.Result{ShouldDelete: tmp.HandlerResult.ShouldDelete, Error: tmp.HandlerResult.Error})
+				tmp.HandlerResult.ShouldDelete = pr.ShouldDelete
+				tmp.HandlerResult.Error = pr.Error
+				routed = tmp
 
 				err = nil
 				panicOccurred = true
@@ -282,8 +295,10 @@ func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult {
 			return routed
 		}
 		// Else, treat as middleware error and consult policy once.
-		decided := r.policy.Decide(ctx, state, FailMiddlewareError, err, routed)
-		return decided
+		pr := r.policy.Decide(ctx, policy.FailMiddlewareError, err, policy.Result{ShouldDelete: routed.HandlerResult.ShouldDelete, Error: routed.HandlerResult.Error})
+		routed.HandlerResult.ShouldDelete = pr.ShouldDelete
+		routed.HandlerResult.Error = pr.Error
+		return routed
 	}
 
 	return routed

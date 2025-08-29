@@ -1,21 +1,21 @@
-AGENTS.md — sqsrouter Codebase Guide
+# AGENTS — sqsrouter Codebase Guide
 
-Purpose
+## Purpose
 A concise, automation-friendly guide for AI agents and tooling to understand, navigate, and operate the sqsrouter repository.
 
-Repository
+## Repository
 - URL: https://github.com/HatsuneMiku3939/sqsrouter
 - Language: Go
 - Module: github.com/hatsunemiku3939/sqsrouter
 - CI: .github/workflows/test.yaml (gomod, unit, lint, e2e, examples)
 
-Core Components
+## Core Components
 - Router: Validates envelope, optionally validates payload, dispatches to a handler, applies Policy to produce a RoutedResult.
 - Consumer: Polls SQS via long polling, invokes Router for each message, deletes message only if RoutedResult.ShouldDelete is true.
 - Policy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy).
 - Middleware: Wraps the routing pipeline to add cross-cutting behavior.
 
-Message Envelope
+## Message Envelope
 ```json
 {
   "schemaVersion": "1.0",
@@ -30,7 +30,7 @@ Message Envelope
 }
 ```
 
-Key Types and APIs
+## Key Types and APIs
 - types.go
   - type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
   - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
@@ -56,7 +56,7 @@ Key Types and APIs
   - ImmediateDeletePolicy: delete on structural/permanent failures; preserve handler intent on handler/middleware errors
   - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
 
-Routing Pipeline (high level)
+## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.
 2) Unmarshal envelope; derive key = messageType:messageVersion.
 3) Resolve handler and optional payload schema.
@@ -65,18 +65,18 @@ Routing Pipeline (high level)
 6) If handler error, consult Policy; else success.
 7) Middlewares wrap the core; outer guard maps panics to FailHandlerPanic via Policy.
 
-Consumer Lifecycle
+## Consumer Lifecycle
 - Long polls ReceiveMessage(maxMessages=5, waitTimeSeconds=10).
 - Each message processed in its own goroutine with processingTimeout=30s.
 - On RoutedResult.ShouldDelete=true, DeleteMessage with deleteTimeout=5s.
 - On false, message is left for retry (visibility timeout expiry).
 - Graceful shutdown via context cancellation; waits for in-flight messages.
 
-Examples
+## Examples
 - example/basic/main.go: Registers handler and payload schema for "updateUserProfile" v1.0, starts Consumer.
 - test/e2e/: Minimal app and script to run against LocalStack.
 
-Common Operations
+## Common Operations
 
 Run unit tests
 ```bash
@@ -93,7 +93,7 @@ Run end-to-end test (LocalStack)
 make e2e-test
 ```
 
-Troubleshooting
+## Troubleshooting
 - Reconcile module state:
 ```bash
 go mod tidy
@@ -103,25 +103,25 @@ go mod tidy
   - Selected Policy (ImmediateDeletePolicy vs SQSRedrivePolicy)
   - Consumer DeleteMessage errors in logs
 
-Operational Guidance
+## Operational Guidance
 - Configure SQS visibility timeout above worst-case processing time.
 - Use DLQ with appropriate maxReceiveCount for stuck messages.
 - Emit logs with timestamp/messageId/type/version for correlation.
 - Consider idempotency for side-effecting handlers.
 
-Extending
+## Extending
 - New Policy: implement Policy.Decide and pass with WithPolicy(...) when creating Router.
 - New Middleware: implement Middleware and register via router.Use(...).
 - New Handlers: router.Register("Type", "Version", handler) and (optionally) RegisterSchema.
 
-Security
+## Security
 - Minimal AWS IAM permissions: ReceiveMessage, DeleteMessage for the queue.
 - Ensure encryption/KMS and data handling policies for sensitive payloads.
 
-Notes for Automation
+## Notes for Automation
 - Route returns a concrete RoutedResult (no error); failures are encoded in HandlerResult.Error and ShouldDelete after Policy.Decide.
 - Middleware errors are mapped via Policy once.
 - Panics are caught at the outer guard and mapped to FailHandlerPanic.
 
-Attribution
+## Attribution
 Originally written and maintained by contributors and Devin, with updates from the core team.

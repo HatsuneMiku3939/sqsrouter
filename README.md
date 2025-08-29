@@ -16,29 +16,29 @@ A Go library to route and process Amazon SQS messages by type and version, with 
 - Clear delete vs retry contract via Policy and handler results
 - Concurrent processing, timeouts, and graceful shutdown
 
-Table of Contents
-- Overview
-- Quick Start
-- Usage
-- Middleware
-- Failure Policies
-- Project Structure
-- Requirements
-- Local E2E Testing
-- Development
-- Contributing
-- License
-- Attribution
+## Table of Contents
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Middleware](#middleware)
+- [Failure Policies](#failure-policies)
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [Local E2E Testing](#local-e2e-testing)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+- [Attribution](#attribution)
 
-Overview
+## Overview
 sqsrouter abstracts SQS long polling, message routing, schema validation, and lifecycle handling so teams can focus on business logic instead of plumbing.
 
-Quick Start
+## Quick Start
 
-Install
+### Install
 This is a Go module. Use Go 1.24.x and standard tooling.
 
-Minimal router and handler
+### Minimal router and handler
 ```go
 package main
 
@@ -70,7 +70,7 @@ func main() {
 }
 ```
 
-Run a consumer
+### Run a consumer
 ```go
 package main
 
@@ -96,9 +96,9 @@ func main() {
 }
 ```
 
-Usage
+## Usage
 
-Message envelope used for routing
+### Message envelope used for routing
 ```json
 {
   "schemaVersion": "1.0",
@@ -109,7 +109,7 @@ Message envelope used for routing
 }
 ```
 
-Handler contract
+### Handler contract
 - ShouldDelete=true for success or permanent failures (do not retry).
 - ShouldDelete=false for transient failures (allow retry when visibility timeout expires).
 - Error is attached on failure; nil means success.
@@ -128,9 +128,9 @@ router.Use(mws...)
 - Middlewares can read RouteState and adjust RoutedResult.
 - Middlewares run even when a handler is not registered.
 
-Failure Policies
+## Failure Policies
 
-Default: ImmediateDeletePolicy
+### Default: ImmediateDeletePolicy
 - Deletes on structural/permanent failures:
   - Invalid envelope schema, envelope parse failure
   - Invalid payload schema
@@ -146,7 +146,7 @@ router, _ := sqsrouter.NewRouter(
 )
 ```
 
-Alternative: SQSRedrivePolicy
+### Alternative: SQSRedrivePolicy
 - Never deletes on failures; retries and DLQ routing are delegated to SQS redrive.
 
 ```go

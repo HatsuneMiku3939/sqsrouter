@@ -1,6 +1,6 @@
-# Middleware
-
-Router supports a middleware chain around the Route pipeline.
+ # Middleware
+ 
+ Router supports a middleware chain around the Route pipeline.
 
 API:
 - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
@@ -12,7 +12,7 @@ Behavior:
 - Middlewares can read RouteState and modify the returned RoutedResult.
 - Middlewares execute even if no handler is registered.
 - Final ShouldDelete/Error is decided by Policy (default ImmediateDeletePolicy); middleware errors do not force delete by default.
-# agents.md — sqsrouter guide
+# AGENTS.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
 

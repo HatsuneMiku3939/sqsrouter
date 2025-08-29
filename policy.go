@@ -17,6 +17,9 @@ const (
 	FailPayloadSchema
 	// FailNoHandler indicates no handler was registered for the message type/version.
 	FailNoHandler
+	// FailHandlerError indicates the user handler returned a non-nil error.
+	// Policy may choose to respect or override the handler's ShouldDelete decision.
+	FailHandlerError
 	// FailHandlerPanic indicates a panic occurred inside user handler or outer recovery.
 	FailHandlerPanic
 	// FailMiddlewareError indicates an error was returned by the middleware-wrapped core pipeline.
@@ -59,7 +62,7 @@ func (p ImmediateDeletePolicy) Decide(_ context.Context, _ *RouteState, kind Fai
 			rr.HandlerResult.Error = inner
 		}
 		return rr
-	case FailMiddlewareError:
+	case FailMiddlewareError, FailHandlerError:
 		if inner != nil && rr.HandlerResult.Error == nil {
 			rr.HandlerResult.Error = inner
 		}

@@ -200,7 +200,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	// Do not recover here; allow panics to bubble to Route, which maps them to FailHandlerPanic via Policy.
 	handlerResult := handler(ctx, envelope.Message, metaJSON)
 
-	// Assemble and return the final routed result.
+	// Assemble the routed result from handler output.
 	rr := RoutedResult{
 		MessageType:    envelope.MessageType,
 		MessageVersion: envelope.MessageVersion,
@@ -208,6 +208,12 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		MessageID:      meta.MessageID,
 		Timestamp:      meta.Timestamp,
 	}
+	// If handler returned an error, consult Policy so it can be the final decider.
+	if handlerResult.Error != nil {
+		decided := r.policy.Decide(ctx, state, FailHandlerError, handlerResult.Error, rr)
+		return decided, nil
+	}
+	// No error: return as-is.
 	return rr, nil
 }
 

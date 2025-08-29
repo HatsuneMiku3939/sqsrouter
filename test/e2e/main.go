@@ -36,7 +36,10 @@ func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte
 	// For the e2e test, we just log the message content.
 	// The test script will check the log output for this message.
 	log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s", msg.TestID, msg.Payload)
-
+	// If enabled, force an application-level error to exercise policy behavior.
+	if os.Getenv("E2E_HANDLER_FORCE_ERR") == "1" {
+		return sqsrouter.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("e2e handler forced error")}
+	}
 	return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
 }
 
@@ -96,6 +99,22 @@ func E2EMiddleware() sqsrouter.Middleware {
 	return func(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc { return mw.handler(next) }
 }
 
+// forceRetryOnHandlerErr is a custom Policy used in E2E to demonstrate that
+// handler errors are passed through Policy and can be centrally overridden.
+type forceRetryOnHandlerErr struct{}
+
+// Decide implements the Policy interface for the custom behavior.
+func (forceRetryOnHandlerErr) Decide(_ context.Context, _ *sqsrouter.RouteState, kind sqsrouter.FailureKind, inner error, rr sqsrouter.RoutedResult) sqsrouter.RoutedResult {
+	if kind == sqsrouter.FailHandlerError {
+		rr.HandlerResult.ShouldDelete = false
+		if inner != nil && rr.HandlerResult.Error == nil {
+			rr.HandlerResult.Error = inner
+		}
+		return rr
+	}
+	return rr
+}
+
 func main() {
 	appCtx, cancelApp := context.WithCancel(context.Background())
 	shutdownChan := make(chan os.Signal, 1)
@@ -132,7 +151,14 @@ func main() {
 
 	sqsClient := sqs.NewFromConfig(cfg)
 
-	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
+	// Optionally install a custom policy that forces retry for handler errors.
+	var opts []sqsrouter.RouterOption
+	if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
+		// Custom policy: turn any handler error into a retry (ShouldDelete=false)
+		opts = append(opts, sqsrouter.WithPolicy(forceRetryOnHandlerErr{}))
+	}
+
+	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, opts...)
 	if err != nil {
 		log.Fatalf("Could not initialize router: %v", err)
 	}

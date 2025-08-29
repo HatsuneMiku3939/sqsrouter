@@ -118,7 +118,7 @@ router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(
 
 ### Failure Policy
 
-By default, the router uses ImmediateDeletePolicy which immediately deletes messages for structural/permanent failures (invalid envelope/payload, no handler, panics). This conserves resources but bypasses SQS DLQ redrive for such cases.
+By default, the router uses ImmediateDeletePolicy which immediately deletes messages for structural/permanent failures (invalid envelope/payload, no handler, panics). For handler and middleware errors, it attaches the error and respects the handler's `ShouldDelete` decision.
 
 If you prefer delegating all failures to SQS redrive so every failed message is retried per queue settings and eventually goes to the DLQ, use SQSRedrivePolicy:
 
@@ -132,6 +132,8 @@ router, _ := sqsrouter.NewRouter(
 
 - ImmediateDeletePolicy: fail-fast deletes on permanent/structural errors.
 - SQSRedrivePolicy: never deletes on failures; SQS manages retries and DLQ routing.
+
+All failures (including handler errors) are routed through the Policy, so you can centralize delete vs. retry decisions. The default behavior preserves handler intent; custom policies can override it.
 
 Middlewares run even if no handler is registered, so you can log/measure such cases.
 

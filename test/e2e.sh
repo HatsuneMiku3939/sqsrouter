@@ -169,4 +169,18 @@ wait_for_log "E2E_MW_BEFORE"
 wait_for_log "E2E_MW_AFTER_ERR"
 wait_for_log "RETRYING message ID"
 
+echo "--- Scenario 5: Policy overrides handler error to retry ---"
+kill "$APP_PID" 2>/dev/null || true
+sleep 2
+export E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR=1
+export E2E_HANDLER_FORCE_ERR=1
+unset E2E_MW_FAIL
+unset E2E_MW_TOUCH
+start_app
+
+TEST_ID4=$(cat /proc/sys/kernel/random/uuid)
+send_message "e2eTest" "1.0" "{\"testId\": \"$TEST_ID4\", \"payload\": \"handler error scenario\"}"
+wait_for_log "E2E_TEST_SUCCESS: Received message for test ID $TEST_ID4"
+wait_for_log "RETRYING message ID"
+
 echo "✅ All E2E scenarios passed."

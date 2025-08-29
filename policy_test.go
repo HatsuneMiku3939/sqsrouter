@@ -32,6 +32,7 @@ func TestImmediateDeletePolicy_Decide(t *testing.T) {
 		{"FailEnvelopeParse_delete", FailEnvelopeParse, errors.New("parse"), base, true, true},
 		{"FailPayloadSchema_delete", FailPayloadSchema, errors.New("payload"), base, true, true},
 		{"FailNoHandler_delete", FailNoHandler, errors.New("nohandler"), base, true, true},
+		{"FailHandlerError_respect_handler", FailHandlerError, errors.New("handler"), base, false, true},
 		{"FailHandlerPanic_delete", FailHandlerPanic, errors.New("panic"), base, true, true},
 		{"FailMiddlewareError_retry_attach_err", FailMiddlewareError, errors.New("mw"), base, false, true},
 		{"FailMiddlewareError_retry_preserve_existing_err", FailMiddlewareError, errors.New("ignored"), RoutedResult{
@@ -112,6 +113,7 @@ func TestSQSRedrivePolicy_AllFailuresShouldNotDelete(t *testing.T) {
 		FailEnvelopeParse,
 		FailPayloadSchema,
 		FailNoHandler,
+		FailHandlerError,
 		FailHandlerPanic,
 		FailMiddlewareError,
 	}

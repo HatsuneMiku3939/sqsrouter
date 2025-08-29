@@ -11,7 +11,7 @@ Behavior:
 - Middlewares run in registration order and wrap the core routing steps.
 - Middlewares can read RouteState and modify the returned RoutedResult.
 - Middlewares execute even if no handler is registered.
-- Final ShouldDelete/Error is decided by Policy (default ImmediateDeletePolicy); middleware errors do not force delete by default.
+- Final ShouldDelete/Error is decided by Policy (default ImmediateDeletePolicy). Middleware and handler errors do not force delete by default; default policy respects the handler's decision.
 # AGENTS.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
@@ -103,7 +103,7 @@ Route flow:
 3) Lookup handler (missing handler → permanent failure → delete)
 4) Validate payload schema if registered (invalid → delete)
 5) Parse metadata (failure only warns)
-6) Run handler → collect HandlerResult
+6) Run handler → collect HandlerResult → if error, consult Policy
 
 Contract:
 - HandlerResult.ShouldDelete
@@ -180,7 +180,7 @@ Security/IAM:
 ## 8) Testing/CI
 ### Failure Policy Options
 
-- ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). Useful for conserving resources and avoiding futile retries.
+- ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). For handler or middleware errors, attaches the error and preserves ShouldDelete as decided by the handler.
 - SQSRedrivePolicy: For any failure kind, sets ShouldDelete=false so the consumer does not delete the message. Retries and DLQ routing are fully delegated to the SQS redrive policy.
 
 Usage:

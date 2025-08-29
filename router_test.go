@@ -135,19 +135,49 @@ func TestRouter_Route(t *testing.T) {
 		assert.Equal(t, "test-id-123", result.MessageID)
 	})
 
-	t.Run("should return error from handler", func(t *testing.T) {
-		r := newTestRouter(t)
-		r.Register(testMessageType, testMessageVersion, testErrorHandler)
+    t.Run("should return error from handler", func(t *testing.T) {
+        r := newTestRouter(t)
+        r.Register(testMessageType, testMessageVersion, testErrorHandler)
 
 		payload := `{"userId": "123", "username": "test"}`
 		msg := createTestMessage(t, testMessageType, testMessageVersion, payload)
 
 		result := r.Route(context.Background(), msg)
 
-		assert.Error(t, result.HandlerResult.Error)
-		assert.Equal(t, "handler failed", result.HandlerResult.Error.Error())
-		assert.True(t, result.HandlerResult.ShouldDelete)
-	})
+        assert.Error(t, result.HandlerResult.Error)
+        assert.Equal(t, "handler failed", result.HandlerResult.Error.Error())
+        assert.True(t, result.HandlerResult.ShouldDelete)
+    })
+
+    t.Run("policy can override handler error decision", func(t *testing.T) {
+        // Custom policy that forces retry on handler errors regardless of handler's ShouldDelete
+        tp := &testPolicy{
+            decideFunc: func(ctx context.Context, st *RouteState, kind FailureKind, inner error, current RoutedResult) RoutedResult {
+                if kind == FailHandlerError {
+                    current.HandlerResult.ShouldDelete = false
+                    if inner != nil && current.HandlerResult.Error == nil {
+                        current.HandlerResult.Error = inner
+                    }
+                    return current
+                }
+                return current
+            },
+        }
+        r, err := NewRouter(testEnvelopeSchema, WithPolicy(tp))
+        require.NoError(t, err)
+        // Handler asks to delete even on error
+        r.Register(testMessageType, testMessageVersion, func(_ context.Context, _, _ []byte) HandlerResult {
+            return HandlerResult{ShouldDelete: true, Error: errors.New("boom")}
+        })
+
+        payload := `{"userId": "123", "username": "test"}`
+        msg := createTestMessage(t, testMessageType, testMessageVersion, payload)
+        result := r.Route(context.Background(), msg)
+
+        assert.Error(t, result.HandlerResult.Error)
+        assert.Equal(t, "boom", result.HandlerResult.Error.Error())
+        assert.False(t, result.HandlerResult.ShouldDelete, "policy override should force retry")
+    })
 
 	t.Run("should handle retry logic from handler", func(t *testing.T) {
 		r := newTestRouter(t)

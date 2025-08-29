@@ -1,9 +1,14 @@
 # sqsrouter
 
-A production-ready Go library to route and process Amazon SQS messages by type and version, with optional JSON Schema validation and pluggable failure policies.
+A Go library to route and process Amazon SQS messages by type and version, with optional JSON Schema validation and pluggable failure policies.
 
 [![CI](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml/badge.svg)](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> ⚠️ **Warning**  
+> This library is under active development.  
+> Interfaces, features, and behaviors may change frequently without prior notice.  
+> Use with caution in production environments.
 
 - Message routing by messageType and messageVersion
 - Optional JSON Schema validation per type/version

@@ -68,3 +68,19 @@ func (p ImmediateDeletePolicy) Decide(_ context.Context, _ *RouteState, kind Fai
 		return rr
 	}
 }
+
+// SQSRedrivePolicy delegates failure handling to SQS redrive.
+type SQSRedrivePolicy struct{}
+
+// Decide implements the Policy interface for SQS redrive delegation.
+// Behavior:
+func (p SQSRedrivePolicy) Decide(_ context.Context, _ *RouteState, kind FailureKind, inner error, rr RoutedResult) RoutedResult {
+	if kind == FailNone {
+		return rr
+	}
+	rr.HandlerResult.ShouldDelete = false
+	if inner != nil && rr.HandlerResult.Error == nil {
+		rr.HandlerResult.Error = inner
+	}
+	return rr
+}

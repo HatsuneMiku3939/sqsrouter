@@ -102,3 +102,82 @@ func TestWithPolicy_SetsRouterPolicy(t *testing.T) {
 		t.Fatalf("expected custom policy to receive inner error")
 	}
 }
+func TestSQSRedrivePolicy_AllFailuresShouldNotDelete(t *testing.T) {
+	p := SQSRedrivePolicy{}
+	ctx := context.Background()
+	st := &RouteState{}
+
+	kinds := []FailureKind{
+		FailEnvelopeSchema,
+		FailEnvelopeParse,
+		FailPayloadSchema,
+		FailNoHandler,
+		FailHandlerPanic,
+		FailMiddlewareError,
+	}
+
+	for _, k := range kinds {
+		inner := errors.New("inner")
+		rr := RoutedResult{
+			MessageType:    "t",
+			MessageVersion: "v1",
+			HandlerResult:  HandlerResult{ShouldDelete: true, Error: nil},
+			MessageID:      "mid",
+			Timestamp:      "ts",
+		}
+		got := p.Decide(ctx, st, k, inner, rr)
+		if got.HandlerResult.ShouldDelete {
+			t.Fatalf("kind %v: expected ShouldDelete=false, got true", k)
+		}
+		if got.HandlerResult.Error == nil {
+			t.Fatalf("kind %v: expected Error to be set, got nil", k)
+		}
+	}
+}
+
+func TestSQSRedrivePolicy_FailNone_Unchanged(t *testing.T) {
+	p := SQSRedrivePolicy{}
+	ctx := context.Background()
+	st := &RouteState{}
+
+	orig := RoutedResult{
+		MessageType:    "t",
+		MessageVersion: "v1",
+		HandlerResult:  HandlerResult{ShouldDelete: true, Error: nil},
+		MessageID:      "mid",
+		Timestamp:      "ts",
+	}
+	got := p.Decide(ctx, st, FailNone, nil, orig)
+	if got.HandlerResult.ShouldDelete != orig.HandlerResult.ShouldDelete {
+		t.Fatalf("expected ShouldDelete unchanged, got %v", got.HandlerResult.ShouldDelete)
+	}
+	if got.HandlerResult.Error != orig.HandlerResult.Error {
+		t.Fatalf("expected Error unchanged")
+	}
+}
+
+func TestSQSRedrivePolicy_ErrorAttachmentAndPreservation(t *testing.T) {
+	p := SQSRedrivePolicy{}
+	ctx := context.Background()
+	st := &RouteState{}
+
+	inner := errors.New("inner")
+	rr := RoutedResult{HandlerResult: HandlerResult{ShouldDelete: true, Error: nil}}
+	got := p.Decide(ctx, st, FailNoHandler, inner, rr)
+	if got.HandlerResult.Error == nil {
+		t.Fatalf("expected inner error attached")
+	}
+	if got.HandlerResult.ShouldDelete {
+		t.Fatalf("expected ShouldDelete=false")
+	}
+
+	existing := errors.New("existing")
+	rr2 := RoutedResult{HandlerResult: HandlerResult{ShouldDelete: true, Error: existing}}
+	got2 := p.Decide(ctx, st, FailPayloadSchema, errors.New("ignored"), rr2)
+	if got2.HandlerResult.Error != existing {
+		t.Fatalf("expected existing error preserved, got %v", got2.HandlerResult.Error)
+	}
+	if got2.HandlerResult.ShouldDelete {
+		t.Fatalf("expected ShouldDelete=false")
+	}
+}

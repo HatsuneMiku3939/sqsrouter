@@ -124,4 +124,5 @@ go mod tidy
 - Panics are caught at the outer guard and mapped to FailHandlerPanic.
 
 ## Attribution
-Originally written and maintained by contributors and Devin, with updates from the core team.
+This project was created and maintained with the help of AI tools — Devin, Gemini, and Codex — under human guidance.
+Specifications were defined through conversations with AI, and implementations were carried out by the AI.

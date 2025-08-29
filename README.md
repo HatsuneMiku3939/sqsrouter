@@ -114,7 +114,7 @@ func main() {
 - ShouldDelete=false for transient failures (allow retry when visibility timeout expires).
 - Error is attached on failure; nil means success.
 
-Middleware
+## Middleware
 
 Register middlewares to wrap the routing pipeline:
 ```go
@@ -156,7 +156,7 @@ router, _ := sqsrouter.NewRouter(
 )
 ```
 
-Project Structure
+## Project Structure
 ```
 sqsrouter/
 ├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
@@ -173,20 +173,20 @@ sqsrouter/
 └── .github/workflows/test.yaml # CI: lint, unit, e2e
 ```
 
-Requirements
+## Requirements
 - Go: 1.24.x (see go.mod)
 - AWS SDK for Go v2
 - gojsonschema
 - Set SQS visibility timeout above worst-case processing time; use DLQ + redrive policy in production.
 
-Local E2E Testing
+## Local E2E Testing
 Requires Docker and Docker Compose.
 ```bash
 make e2e-test
 ```
 This starts LocalStack, runs a test app, publishes a test message, and verifies via logs.
 
-Development
+## Development
 ```bash
 make test              # unit tests
 make lint              # golangci-lint
@@ -201,14 +201,15 @@ Filter tests:
 make test TESTARGS="-run=MyTest"
 ```
 
-Contributing
+## Contributing
 - Issues and PRs welcome
 - Keep changes focused and add tests when possible
 - Run lint and tests before submitting
 - Discuss larger API changes in an issue first
 
-License
+## License
 MIT. See LICENSE.
 
-Attribution
-Originally written and maintained by contributors and Devin, with updates from the core team.
+## Attribution
+This project was created and maintained with the help of AI tools — Devin, Gemini, and Codex — under my guidance. 
+Specifications were defined through conversations with AI, and implementations were carried out by the AI.

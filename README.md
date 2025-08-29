@@ -5,6 +5,11 @@ A lightweight Go library to route and process Amazon SQS messages by type and ve
 [![CI](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml/badge.svg)](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml)
 [![License: MIT](LICENSE)](LICENSE)
 
+> ⚠️ **Warning**  
+> This library is under active development.  
+> Interfaces, features, and behaviors may change frequently without prior notice.  
+> Use with caution in production environments.
+
 ## Table of Contents
 - Overview
 - Features

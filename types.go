@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/hatsunemiku3939/sqsrouter/policy"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -74,19 +74,7 @@ type Router struct {
 	envelopeSchema gojsonschema.JSONLoader
 
 	middlewares []Middleware
-	policy      Policy
+	policy      policy.Policy
 }
 
-// SQSClient defines the interface for SQS operations needed by the Consumer.
-// This allows for easier testing by mocking the SQS client.
-type SQSClient interface {
-	ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error)
-	DeleteMessage(ctx context.Context, params *sqs.DeleteMessageInput, optFns ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
-}
-
-// Consumer encapsulates the SQS polling and message processing logic.
-type Consumer struct {
-	client   SQSClient
-	queueURL string
-	router   *Router
-}
+// (no consumer types here; moved to consumer package)

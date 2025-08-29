@@ -1,18 +1,19 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/hatsunemiku3939/sqsrouter"
+    "github.com/aws/aws-sdk-go-v2/config"
+    "github.com/aws/aws-sdk-go-v2/service/sqs"
+    "github.com/hatsunemiku3939/sqsrouter"
+    "github.com/hatsunemiku3939/sqsrouter/consumer"
 )
 
 // --- Schemas ---
@@ -109,8 +110,8 @@ func main() {
 	}
 
 	// --- 4. Setup and Start the Consumer ---
-	consumer := sqsrouter.NewConsumer(sqsClient, queueURL, router)
-	consumer.Start(appCtx)
+    c := consumer.NewConsumer(sqsClient, queueURL, router)
+    c.Start(appCtx)
 
 	log.Println("Application has shut down.")
 }

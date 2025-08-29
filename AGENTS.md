@@ -11,7 +11,7 @@ Behavior:
 - Middlewares run in registration order and wrap the core routing steps.
 - Middlewares can read RouteState and modify the returned RoutedResult.
 - Middlewares execute even if no handler is registered.
-- Final ShouldDelete/Error is decided by Policy (default ImmediateDeletePolicy). Middleware and handler errors do not force delete by default; default policy respects the handler's decision.
+- Final ShouldDelete/Error is decided by Policy (default policy.ImmediateDeletePolicy). Middleware and handler errors do not force delete by default; default policy respects the handler's decision.
 # AGENTS.md — sqsrouter guide
 
 This document is a practical guide to help you understand and use the sqsrouter codebase quickly. It consolidates architecture, usage, and operational tips so an AI agent or automation can reliably process SQS messages. Let’s go♪
@@ -34,7 +34,7 @@ Pipeline flow:
 
 Key types:
 - Exported public types are defined in types.go
-- Consumer: NewConsumer(client, queueURL, router).Start(ctx)
+- Consumer: consumer.NewConsumer(client, queueURL, router).Start(ctx)
 - Router: NewRouter(envelopeSchema).Register(type, version, handler).RegisterSchema(type, version, schema).Route(ctx, raw)
 
 ## 3) Message format and schema
@@ -72,10 +72,10 @@ var EnvelopeSchema = `{
 
 ## 4) Router usage
 ```go
-// Create router with envelope schema (uses default ImmediateDeletePolicy)
+// Create router with envelope schema (uses default policy.ImmediateDeletePolicy)
 router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-// Or provide a custom policy:
-// router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
+// Or provide a custom policy (import "github.com/hatsunemiku3939/sqsrouter/policy"):
+// router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
 if err != nil {
     panic(err) // (Do not panic in production; handle errors properly.)
 }
@@ -98,7 +98,7 @@ router.RegisterSchema("UserCreated", "v1", `{
 
 Route flow:
 1) Validate envelope (invalid structure → permanent failure → delete)
-- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is ImmediateDeletePolicy.
+- Policy: Router delegates final ShouldDelete/Error decision to a Policy implementation. Default is policy.ImmediateDeletePolicy.
 2) Unmarshal envelope
 3) Lookup handler (missing handler → permanent failure → delete)
 4) Validate payload schema if registered (invalid → delete)
@@ -120,12 +120,12 @@ Key constants:
 ```go
 // Build AWS SQS client (aws-sdk-go-v2) and create Consumer
 client := sqs.NewFromConfig(cfg)
-consumer := sqsrouter.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
+c := consumer.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
 
 // Start polling (blocking until ctx canceled)
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
-consumer.Start(ctx)
+c.Start(ctx)
 ```
 
 Processing/deletion logic:
@@ -145,14 +145,14 @@ Path: example/basic/main.go
 // Pseudocode summary (refer to the real example in the repo)
 // Default policy:
 router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
-// Or custom policy:
-// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(MyPolicy{}))
+// Or custom policy (import policy):
+// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}))
 router.Register("UserCreated", "v1", userCreatedHandler)
 router.RegisterSchema("UserCreated", "v1", userCreatedSchemaJSON)
 
 client := sqs.NewFromConfig(cfg)
-consumer := sqsrouter.NewConsumer(client, queueURL, router)
-consumer.Start(ctx)
+c := consumer.NewConsumer(client, queueURL, router)
+c.Start(ctx)
 ```
 
 For local e2e testing, see test/docker-compose.yaml and test/e2e.sh. You can use LocalStack to emulate SQS.
@@ -180,8 +180,8 @@ Security/IAM:
 ## 8) Testing/CI
 ### Failure Policy Options
 
-- ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). For handler or middleware errors, attaches the error and preserves ShouldDelete as decided by the handler.
-- SQSRedrivePolicy: For any failure kind, sets ShouldDelete=false so the consumer does not delete the message. Retries and DLQ routing are fully delegated to the SQS redrive policy.
+- policy.ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). For handler or middleware errors, attaches the error and preserves ShouldDelete as decided by the handler.
+- policy.SQSRedrivePolicy: For any failure kind, sets ShouldDelete=false so the consumer does not delete the message. Retries and DLQ routing are fully delegated to the SQS redrive policy.
 
 Usage:
 
@@ -192,7 +192,7 @@ Usage:
 // Delegate all failure handling to SQS redrive:
 router, _ := sqsrouter.NewRouter(
     sqsrouter.EnvelopeSchema,
-    sqsrouter.WithPolicy(sqsrouter.SQSRedrivePolicy{}),
+    sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
 )
 ```
 
@@ -223,7 +223,7 @@ If you hit local dependency issues:
 ## 11) References
 - Public types: types.go
 - Router/Schema/Route: router.go
-- Consumer/Start/processMessage: consumer.go
+- Consumer/Start/processMessage: consumer/consumer.go
 - Example: example/basic/main.go
 - Tests: consumer_test.go, router_test.go
 - e2e: test/e2e.sh, test/docker-compose.yaml

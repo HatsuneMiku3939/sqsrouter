@@ -178,6 +178,27 @@ Security/IAM:
 - If messages contain sensitive data, verify encryption/KMS policies
 
 ## 8) Testing/CI
+### Failure Policy Options
+
+- ImmediateDeletePolicy (default): Structural/permanent failures are marked ShouldDelete=true immediately (invalid envelope/payload, no handler, panics). Useful for conserving resources and avoiding futile retries.
+- SQSRedrivePolicy: For any failure kind, sets ShouldDelete=false so the consumer does not delete the message. Retries and DLQ routing are fully delegated to the SQS redrive policy.
+
+Usage:
+
+```go
+// Default behavior:
+// router, _ := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
+
+// Delegate all failure handling to SQS redrive:
+router, _ := sqsrouter.NewRouter(
+    sqsrouter.EnvelopeSchema,
+    sqsrouter.WithPolicy(sqsrouter.SQSRedrivePolicy{}),
+)
+```
+
+Operational note:
+- Ensure your SQS queue has an appropriate redrive policy (dead-letter queue + maxReceiveCount) so permanently failing messages eventually land in the DLQ for analysis.
+
 - Unit tests: consumer_test.go, router_test.go
 - e2e: test/e2e.sh, test/docker-compose.yaml
 - GitHub Actions runs lint/test/e2e; documentation-only changes should have minimal impact

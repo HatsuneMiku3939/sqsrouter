@@ -3,7 +3,7 @@
 A lightweight Go library to route and process Amazon SQS messages by type and version with optional JSON Schema validation.
 
 [![CI](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml/badge.svg)](https://github.com/HatsuneMiku3939/sqsrouter/actions/workflows/test.yaml)
-[![License: MIT](LICENSE)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > ⚠️ **Warning**  
 > This library is under active development.  

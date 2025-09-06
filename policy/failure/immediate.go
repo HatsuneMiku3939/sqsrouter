@@ -1,4 +1,4 @@
-package policy
+package failure
 
 import "context"
 
@@ -7,7 +7,7 @@ import "context"
 type ImmediateDeletePolicy struct{}
 
 // Decide implements ImmediateDeletePolicy behavior.
-func (p ImmediateDeletePolicy) Decide(_ context.Context, kind FailureKind, inner error, current Result) Result {
+func (p ImmediateDeletePolicy) Decide(_ context.Context, kind Kind, inner error, current Result) Result {
 	switch kind {
 	case FailNone:
 		return current

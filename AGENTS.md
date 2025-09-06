@@ -10,9 +10,10 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 - CI: .github/workflows/test.yaml (gomod, unit, lint, e2e, examples)
 
 ## Core Components
-- Router: Validates envelope, optionally validates payload, dispatches to a handler, applies Policy to produce a RoutedResult.
+- Router: Validates envelope, optionally validates payload, dispatches to a handler, applies FailurePolicy to produce a RoutedResult.
 - Consumer: Polls SQS via long polling, invokes Router for each message, deletes message only if RoutedResult.ShouldDelete is true.
-- Policy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy).
+- FailurePolicy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy).
+- RoutingPolicy: Strategy for selecting a handler key from available registrations (default ExactMatchPolicy).
 - Middleware: Wraps the routing pipeline to add cross-cutting behavior.
 
 ## Message Envelope
@@ -49,21 +50,24 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }
   - func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer
   - func (c *Consumer) Start(ctx context.Context)
-- policy/
+- policy/failure/
   - type FailureKind (FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerError, FailHandlerPanic, FailMiddlewareError)
   - type Result { ShouldDelete bool; Error error }
-  - type Policy interface { Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result }
+  - type FailurePolicy interface { Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result }
   - ImmediateDeletePolicy: delete on structural/permanent failures; preserve handler intent on handler/middleware errors
   - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
+- policy/routing/
+  - ExactMatchPolicy: choose handler exactly matching messageType:messageVersion
+  - Usage: import as `routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"` and pass with `WithRoutingPolicy(routing.ExactMatchPolicy{})`
 
 ## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.
-2) Unmarshal envelope; derive key = messageType:messageVersion.
+2) Unmarshal envelope; collect available handler keys; ask RoutingPolicy for selected key (if nil, exact-match is used).
 3) Resolve handler and optional payload schema.
 4) If schema exists, validate payload.
 5) Prepare metadata JSON and call handler(message, metadata).
-6) If handler error, consult Policy; else success.
-7) Middlewares wrap the core; outer guard maps panics to FailHandlerPanic via Policy.
+6) If handler error, consult FailurePolicy; else success.
+7) Middlewares wrap the core; outer guard maps panics to FailHandlerPanic via FailurePolicy.
 
 ## Consumer Lifecycle
 - Long polls ReceiveMessage(maxMessages=5, waitTimeSeconds=10).
@@ -100,7 +104,7 @@ go mod tidy
 ```
 - If messages are not being deleted, check:
   - HandlerResult.ShouldDelete is true for successful/permanent outcomes
-  - Selected Policy (ImmediateDeletePolicy vs SQSRedrivePolicy)
+  - Selected FailurePolicy (ImmediateDeletePolicy vs SQSRedrivePolicy)
   - Consumer DeleteMessage errors in logs
 
 ## Operational Guidance
@@ -110,7 +114,8 @@ go mod tidy
 - Consider idempotency for side-effecting handlers.
 
 ## Extending
-- New Policy: implement Policy.Decide and pass with WithPolicy(...) when creating Router.
+- New FailurePolicy: implement failure.FailurePolicy and pass with WithFailurePolicy(...) when creating Router.
+- New RoutingPolicy: implement sqsrouter.RoutingPolicy and pass with WithRoutingPolicy(...).
 - New Middleware: implement Middleware and register via router.Use(...).
 - New Handlers: router.Register("Type", "Version", handler) and (optionally) RegisterSchema.
 
@@ -119,8 +124,8 @@ go mod tidy
 - Ensure encryption/KMS and data handling policies for sensitive payloads.
 
 ## Notes for Automation
-- Route returns a concrete RoutedResult (no error); failures are encoded in HandlerResult.Error and ShouldDelete after Policy.Decide.
-- Middleware errors are mapped via Policy once.
+- Route returns a concrete RoutedResult (no error); failures are encoded in HandlerResult.Error and ShouldDelete after FailurePolicy.Decide.
+- Middleware errors are mapped via FailurePolicy once.
 - Panics are caught at the outer guard and mapped to FailHandlerPanic.
 
 ## Attribution

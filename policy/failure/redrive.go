@@ -1,12 +1,12 @@
-package policy
+package failure
 
 import "context"
 
 // SQSRedrivePolicy always returns ShouldDelete=false for failures so SQS redrive handles retries/DLQ.
 type SQSRedrivePolicy struct{}
 
-// Decide implements the Policy interface for SQS redrive delegation.
-func (p SQSRedrivePolicy) Decide(_ context.Context, kind FailureKind, inner error, current Result) Result {
+// Decide implements the FailurePolicy interface for SQS redrive delegation.
+func (p SQSRedrivePolicy) Decide(_ context.Context, kind Kind, inner error, current Result) Result {
 	if kind == FailNone {
 		return current
 	}

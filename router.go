@@ -28,8 +28,6 @@ func (e coreFailureErr) Error() string {
 // Unwrap returns the underlying error cause.
 func (e coreFailureErr) Unwrap() error { return e.cause }
 
-// ExactMatchPolicy is provided in routing_exact_match.go
-
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 	loader := jsonschema.NewStringLoader(envelopeSchema)

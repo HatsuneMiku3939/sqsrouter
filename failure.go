@@ -1,13 +1,14 @@
-package failure
+package sqsrouter
 
 import "context"
 
-// Kind enumerates where in the pipeline a failure occurred.
-type Kind int
+// FailureKind enumerates where in the pipeline a failure occurred.
+// Keeping constant names identical to previous subpackage for continuity.
+type FailureKind int
 
 const (
 	// FailNone indicates no failure occurred.
-	FailNone Kind = iota
+	FailNone FailureKind = iota
 	// FailEnvelopeSchema indicates the outer envelope JSON failed schema validation.
 	FailEnvelopeSchema
 	// FailEnvelopeParse indicates the outer envelope JSON could not be parsed.
@@ -25,13 +26,13 @@ const (
 	FailMiddlewareError
 )
 
-// Result represents the delete decision and error to attach.
-type Result struct {
+// FailureResult represents the delete decision and error to attach.
+type FailureResult struct {
 	ShouldDelete bool
 	Error        error
 }
 
-// Policy decides the final Result given a failure classification and current decision.
-type Policy interface {
-	Decide(ctx context.Context, kind Kind, inner error, current Result) Result
+// FailurePolicy decides the final FailureResult given a failure classification and current decision.
+type FailurePolicy interface {
+	Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult
 }

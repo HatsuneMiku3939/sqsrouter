@@ -1,14 +1,10 @@
 package sqsrouter
 
-import (
-	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
-)
-
 // RouterOption configures a Router at construction time.
 type RouterOption func(*Router)
 
 // WithFailurePolicy sets a custom failure policy for the Router.
-func WithFailurePolicy(p failure.Policy) RouterOption {
+func WithFailurePolicy(p FailurePolicy) RouterOption {
 	return func(r *Router) { r.failurePolicy = p }
 }
 

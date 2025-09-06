@@ -152,9 +152,9 @@ func TestRouter_Route(t *testing.T) {
 
     t.Run("policy can override handler error decision", func(t *testing.T) {
         // Custom failure policy that forces retry on handler errors regardless of handler's ShouldDelete
-        tp := failure.FailurePolicy(failure.ImmediateDeletePolicy{})
+        tp := failure.Policy(failure.ImmediateDeletePolicy{})
         // Wrap ImmediateDeletePolicy with a decorator behavior for this test
-        tp = failure.FailurePolicy(policyFunc(func(ctx context.Context, kind failure.FailureKind, inner error, current failure.Result) failure.Result {
+        tp = failure.Policy(policyFunc(func(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
             if kind == failure.FailHandlerError {
                 current.ShouldDelete = false
                 if inner != nil && current.Error == nil {

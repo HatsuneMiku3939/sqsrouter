@@ -1,20 +1,20 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "os"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
-    "github.com/aws/aws-sdk-go-v2/aws"
-    "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/aws/aws-sdk-go-v2/service/sqs"
-    "github.com/hatsunemiku3939/sqsrouter"
-    "github.com/hatsunemiku3939/sqsrouter/consumer"
-    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/hatsunemiku3939/sqsrouter"
+	"github.com/hatsunemiku3939/sqsrouter/consumer"
+	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 const (
@@ -107,13 +107,13 @@ type forceRetryOnHandlerErr struct{}
 
 // Decide implements the FailurePolicy interface for the custom behavior.
 func (forceRetryOnHandlerErr) Decide(_ context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
-    if kind == failure.FailHandlerError {
-        current.ShouldDelete = false
-        if inner != nil && current.Error == nil {
-            current.Error = inner
-        }
-    }
-    return current
+	if kind == failure.FailHandlerError {
+		current.ShouldDelete = false
+		if inner != nil && current.Error == nil {
+			current.Error = inner
+		}
+	}
+	return current
 }
 
 func main() {
@@ -153,11 +153,11 @@ func main() {
 	sqsClient := sqs.NewFromConfig(cfg)
 
 	// Optionally install a custom policy that forces retry for handler errors.
-    var opts []sqsrouter.RouterOption
-    if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
-        // Custom policy: turn any handler error into a retry (ShouldDelete=false)
-        opts = append(opts, sqsrouter.WithFailurePolicy(forceRetryOnHandlerErr{}))
-    }
+	var opts []sqsrouter.RouterOption
+	if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
+		// Custom policy: turn any handler error into a retry (ShouldDelete=false)
+		opts = append(opts, sqsrouter.WithFailurePolicy(forceRetryOnHandlerErr{}))
+	}
 
 	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, opts...)
 	if err != nil {
@@ -180,8 +180,8 @@ func main() {
 
 	router.Register(MsgTypeE2ETest, MsgVersion1_0, E2ETestHandler)
 
-    c := consumer.NewConsumer(sqsClient, queueURL, router)
-    c.Start(appCtx)
+	c := consumer.NewConsumer(sqsClient, queueURL, router)
+	c.Start(appCtx)
 
 	log.Println("Application has shut down.")
 }

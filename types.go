@@ -2,29 +2,12 @@ package sqsrouter
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 
 	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+	stypes "github.com/hatsunemiku3939/sqsrouter/types"
 	"github.com/xeipuuv/gojsonschema"
 )
-
-// MessageEnvelope is a struct to unmarshal the outer layer of an SQS message.
-// It contains the routing information and the actual message payload.
-type MessageEnvelope struct {
-	SchemaVersion  string          `json:"schemaVersion"`
-	MessageType    string          `json:"messageType"`
-	MessageVersion string          `json:"messageVersion"`
-	Message        json.RawMessage `json:"message"`
-	Metadata       MessageMetadata `json:"metadata"`
-}
-
-// MessageMetadata holds common metadata found in every message.
-type MessageMetadata struct {
-	Timestamp string `json:"timestamp"`
-	Source    string `json:"source"`
-	MessageID string `json:"messageId"`
-}
 
 // HandlerResult indicates the outcome of processing a message.
 type HandlerResult struct {
@@ -49,11 +32,11 @@ type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON [
 // It includes the raw message, parsed envelope, handler/schema resolution, and derived metadata.
 type RouteState struct {
 	Raw           []byte
-	Envelope      *MessageEnvelope
+	Envelope      *stypes.MessageEnvelope
 	HandlerKey    string
 	HandlerExists bool
 	SchemaExists  bool
-	Metadata      *MessageMetadata
+	Metadata      *stypes.MessageMetadata
 	Handler       MessageHandler
 	Schema        gojsonschema.JSONLoader
 }
@@ -74,18 +57,10 @@ type Router struct {
 	envelopeSchema gojsonschema.JSONLoader
 
 	middlewares   []Middleware
-	routingPolicy RoutingPolicy
+	routingPolicy stypes.RoutingPolicy
 	failurePolicy failure.Policy
 }
 
 // (no consumer types here; moved to consumer package)
 
-// HandlerKey is the unique identifier for a registered handler (e.g., "messageType:messageVersion").
-type HandlerKey string
-
-// RoutingPolicy decides which handler should process an incoming message.
-// Implementations may perform exact match, version fallback, A/B testing, etc.
-// Returning an empty HandlerKey means no handler selected.
-type RoutingPolicy interface {
-	Decide(ctx context.Context, envelope *MessageEnvelope, availableHandlers []HandlerKey) HandlerKey
-}
+// (routing policy and shared message types moved to package types)

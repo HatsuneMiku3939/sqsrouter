@@ -171,13 +171,14 @@ router, _ := sqsrouter.NewRouter(
 ```
 
 ```go
-// Define a custom routing policy by implementing sqsrouter.RoutingPolicy
+// Define a custom routing policy by implementing types.RoutingPolicy
+// import types "github.com/hatsunemiku3939/sqsrouter/types"
 type MyRoutingPolicy struct{}
-func (MyRoutingPolicy) Decide(ctx context.Context, env *sqsrouter.MessageEnvelope, available []sqsrouter.HandlerKey) sqsrouter.HandlerKey {
+func (MyRoutingPolicy) Decide(ctx context.Context, env *types.MessageEnvelope, available []types.HandlerKey) types.HandlerKey {
   // Example: fallback to v1 if exact match not found
-  want := sqsrouter.HandlerKey(env.MessageType + ":" + env.MessageVersion)
+  want := types.HandlerKey(env.MessageType + ":" + env.MessageVersion)
   for _, k := range available { if k == want { return k } }
-  fallback := sqsrouter.HandlerKey(env.MessageType + ":v1")
+  fallback := types.HandlerKey(env.MessageType + ":v1")
   for _, k := range available { if k == fallback { return k } }
   return ""
 }
@@ -197,7 +198,7 @@ sqsrouter/
 │   └── routing/                # Routing policy (ExactMatchPolicy, custom implementations)
 ├── internal/jsonschema/        # JSON schema validation utilities
 ├── router.go                   # Routing by type/version, schema validation, handler registry
-├── types.go                    # Public types and interfaces
+├── types/                      # Shared public types (envelope, keys, interfaces)
 ├── example/
 │   └── basic/                  # Minimal runnable example
 ├── test/

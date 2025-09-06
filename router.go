@@ -8,6 +8,8 @@ import (
 
 	"github.com/hatsunemiku3939/sqsrouter/internal/jsonschema"
 	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+	routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"
+	stypes "github.com/hatsunemiku3939/sqsrouter/types"
 )
 
 // coreFailureErr is used to propagate a failure signal through middlewares
@@ -29,19 +31,7 @@ func (e coreFailureErr) Error() string {
 // Unwrap returns the underlying error cause.
 func (e coreFailureErr) Unwrap() error { return e.cause }
 
-// defaultExactMatchPolicy implements RoutingPolicy without importing policy/routing
-// to avoid an import cycle. It selects the exact messageType:messageVersion key.
-type defaultExactMatchPolicy struct{}
-
-func (defaultExactMatchPolicy) Decide(_ context.Context, envelope *MessageEnvelope, available []HandlerKey) HandlerKey { //nolint:revive
-	want := HandlerKey(makeKey(envelope.MessageType, envelope.MessageVersion))
-	for _, k := range available {
-		if k == want {
-			return k
-		}
-	}
-	return ""
-}
+// (ExactMatchPolicy is provided by policy/routing package)
 
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
@@ -55,7 +45,7 @@ func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
-		routingPolicy:  defaultExactMatchPolicy{},
+		routingPolicy:  routing.ExactMatchPolicy{},
 		failurePolicy:  failure.ImmediateDeletePolicy{},
 	}
 	for _, opt := range opts {
@@ -136,7 +126,7 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	}
 
 	// Step 2: Parse the envelope to extract routing metadata and payload.
-	var envelope MessageEnvelope
+	var envelope stypes.MessageEnvelope
 	if err := json.Unmarshal(state.Raw, &envelope); err != nil {
 		rr := RoutedResult{
 			MessageType:    "unknown",
@@ -154,9 +144,9 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 	state.Envelope = &envelope
 	// Decide handler using routing policy.
 	r.mu.RLock()
-	available := make([]HandlerKey, 0, len(r.handlers))
+	available := make([]stypes.HandlerKey, 0, len(r.handlers))
 	for k := range r.handlers {
-		available = append(available, HandlerKey(k))
+		available = append(available, stypes.HandlerKey(k))
 	}
 	r.mu.RUnlock()
 	decided := r.routingPolicy.Decide(ctx, &envelope, available)

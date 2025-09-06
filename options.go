@@ -2,6 +2,7 @@ package sqsrouter
 
 import (
 	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+	stypes "github.com/hatsunemiku3939/sqsrouter/types"
 )
 
 // RouterOption configures a Router at construction time.
@@ -13,6 +14,6 @@ func WithFailurePolicy(p failure.Policy) RouterOption {
 }
 
 // WithRoutingPolicy sets a custom routing policy for the Router.
-func WithRoutingPolicy(p RoutingPolicy) RouterOption {
+func WithRoutingPolicy(p stypes.RoutingPolicy) RouterOption {
 	return func(r *Router) { r.routingPolicy = p }
 }

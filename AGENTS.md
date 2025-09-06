@@ -32,7 +32,9 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ```
 
 ## Key Types and APIs
-- types.go
+- types/
+  - types.MessageEnvelope, types.MessageMetadata, types.HandlerKey, types.RoutingPolicy
+- sqsrouter (root)
   - type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
   - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
   - type Middleware func(next HandlerFunc) HandlerFunc
@@ -115,7 +117,7 @@ go mod tidy
 
 ## Extending
 - New FailurePolicy: implement failure.FailurePolicy and pass with WithFailurePolicy(...) when creating Router.
-- New RoutingPolicy: implement sqsrouter.RoutingPolicy and pass with WithRoutingPolicy(...).
+- New RoutingPolicy: implement types.RoutingPolicy and pass with WithRoutingPolicy(...).
 - New Middleware: implement Middleware and register via router.Use(...).
 - New Handlers: router.Register("Type", "Version", handler) and (optionally) RegisterSchema.
 

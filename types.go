@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"sync"
 
-	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -75,7 +74,7 @@ type Router struct {
 
 	middlewares   []Middleware
 	routingPolicy RoutingPolicy
-	failurePolicy failure.Policy
+	failurePolicy FailurePolicy
 }
 
 // (no consumer types here; moved to consumer package)

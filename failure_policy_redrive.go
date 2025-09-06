@@ -1,4 +1,4 @@
-package failure
+package sqsrouter
 
 import "context"
 
@@ -6,7 +6,7 @@ import "context"
 type SQSRedrivePolicy struct{}
 
 // Decide implements the FailurePolicy interface for SQS redrive delegation.
-func (p SQSRedrivePolicy) Decide(_ context.Context, kind Kind, inner error, current Result) Result {
+func (p SQSRedrivePolicy) Decide(_ context.Context, kind FailureKind, inner error, current FailureResult) FailureResult {
 	if kind == FailNone {
 		return current
 	}

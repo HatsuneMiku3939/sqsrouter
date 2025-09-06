@@ -1,4 +1,4 @@
-package failure
+package sqsrouter
 
 import (
     "context"
@@ -10,13 +10,13 @@ func TestImmediateDeletePolicyDecide(t *testing.T) {
     p := ImmediateDeletePolicy{}
     ctx := context.Background()
 
-    base := Result{ShouldDelete: false, Error: nil}
+    base := FailureResult{ShouldDelete: false, Error: nil}
 
     cases := []struct {
         name       string
-        kind       Kind
+        kind       FailureKind
         innerErr   error
-        current    Result
+        current    FailureResult
         wantDelete bool
         wantHasErr bool
     }{
@@ -28,7 +28,7 @@ func TestImmediateDeletePolicyDecide(t *testing.T) {
         {"FailHandlerError_respect_handler", FailHandlerError, errors.New("handler"), base, false, true},
         {"FailHandlerPanic_delete", FailHandlerPanic, errors.New("panic"), base, true, true},
         {"FailMiddlewareError_retry_attach_err", FailMiddlewareError, errors.New("mw"), base, false, true},
-        {"FailMiddlewareError_retry_preserve_existing_err", FailMiddlewareError, errors.New("ignored"), Result{ShouldDelete: false, Error: errors.New("already")}, false, true},
+        {"FailMiddlewareError_retry_preserve_existing_err", FailMiddlewareError, errors.New("ignored"), FailureResult{ShouldDelete: false, Error: errors.New("already")}, false, true},
     }
 
     for _, tc := range cases {

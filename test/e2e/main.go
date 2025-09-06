@@ -14,7 +14,6 @@ import (
     "github.com/aws/aws-sdk-go-v2/service/sqs"
     "github.com/hatsunemiku3939/sqsrouter"
     "github.com/hatsunemiku3939/sqsrouter/consumer"
-    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 const (
@@ -106,8 +105,8 @@ func E2EMiddleware() sqsrouter.Middleware {
 type forceRetryOnHandlerErr struct{}
 
 // Decide implements the FailurePolicy interface for the custom behavior.
-func (forceRetryOnHandlerErr) Decide(_ context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
-    if kind == failure.FailHandlerError {
+func (forceRetryOnHandlerErr) Decide(_ context.Context, kind sqsrouter.FailureKind, inner error, current sqsrouter.FailureResult) sqsrouter.FailureResult {
+    if kind == sqsrouter.FailHandlerError {
         current.ShouldDelete = false
         if inner != nil && current.Error == nil {
             current.Error = inner

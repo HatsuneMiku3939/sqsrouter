@@ -4,16 +4,14 @@ import (
     "context"
     "errors"
     "testing"
-
-    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 type testPolicy struct {
-    lastKind failure.Kind
+    lastKind FailureKind
     lastErr  error
 }
 
-func (tp *testPolicy) Decide(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result { //nolint:revive
+func (tp *testPolicy) Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult { //nolint:revive
     tp.lastKind = kind
     tp.lastErr = inner
     return current
@@ -24,7 +22,7 @@ func TestWithPolicy_SetsRouterPolicy(t *testing.T) {
     if err != nil {
         t.Fatalf("NewRouter err: %v", err)
     }
-    if _, ok := r.failurePolicy.(failure.ImmediateDeletePolicy); !ok {
+    if _, ok := r.failurePolicy.(ImmediateDeletePolicy); !ok {
         t.Fatalf("expected default failure policy ImmediateDeletePolicy")
     }
 
@@ -42,9 +40,9 @@ func TestWithPolicy_SetsRouterPolicy(t *testing.T) {
     // simulate middleware failure path to invoke policy
     _ = r2.Route(context.Background(), []byte(`{}`)) // not strictly needed but ensure router constructed
     // Directly call Decide through interface to capture parameters
-    _ = r2.failurePolicy.Decide(context.Background(), failure.FailMiddlewareError, inner, failure.Result{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
-    if custom.lastKind != failure.FailMiddlewareError {
-        t.Fatalf("expected custom policy to be invoked with kind=%v, got %v", failure.FailMiddlewareError, custom.lastKind)
+    _ = r2.failurePolicy.Decide(context.Background(), FailMiddlewareError, inner, FailureResult{ShouldDelete: rr.HandlerResult.ShouldDelete, Error: rr.HandlerResult.Error})
+    if custom.lastKind != FailMiddlewareError {
+        t.Fatalf("expected custom policy to be invoked with kind=%v, got %v", FailMiddlewareError, custom.lastKind)
     }
     if custom.lastErr != inner {
         t.Fatalf("expected custom policy to receive inner error")

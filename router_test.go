@@ -9,7 +9,6 @@ import (
 
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
-    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 const (
@@ -152,10 +151,10 @@ func TestRouter_Route(t *testing.T) {
 
     t.Run("policy can override handler error decision", func(t *testing.T) {
         // Custom failure policy that forces retry on handler errors regardless of handler's ShouldDelete
-        tp := failure.Policy(failure.ImmediateDeletePolicy{})
+        tp := FailurePolicy(ImmediateDeletePolicy{})
         // Wrap ImmediateDeletePolicy with a decorator behavior for this test
-        tp = failure.Policy(policyFunc(func(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
-            if kind == failure.FailHandlerError {
+        tp = FailurePolicy(policyFunc(func(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult {
+            if kind == FailHandlerError {
                 current.ShouldDelete = false
                 if inner != nil && current.Error == nil {
                     current.Error = inner
@@ -272,10 +271,10 @@ func TestRouter_Route(t *testing.T) {
 
 }
 
-// policyFunc allows using a function as a failure.FailurePolicy for tests.
-type policyFunc func(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result
+// policyFunc allows using a function as a sqsrouter.FailurePolicy for tests.
+type policyFunc func(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult
 
-func (f policyFunc) Decide(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
+func (f policyFunc) Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult {
     return f(ctx, kind, inner, current)
 }
 

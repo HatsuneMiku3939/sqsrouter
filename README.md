@@ -139,10 +139,9 @@ router.Use(mws...)
 - Preserves handler intent for HandlerError or MiddlewareError.
 
 ```go
-// import failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithFailurePolicy(failure.ImmediateDeletePolicy{}),
+  sqsrouter.WithFailurePolicy(sqsrouter.ImmediateDeletePolicy{}),
 )
 ```
 
@@ -150,10 +149,9 @@ router, _ := sqsrouter.NewRouter(
 - Never deletes on failures; retries and DLQ routing are delegated to SQS redrive.
 
 ```go
-// import failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithFailurePolicy(failure.SQSRedrivePolicy{}),
+  sqsrouter.WithFailurePolicy(sqsrouter.SQSRedrivePolicy{}),
 )
 ```
 
@@ -162,11 +160,10 @@ router, _ := sqsrouter.NewRouter(
 Customize how handlers are selected for a message. Default is exact match on `messageType:messageVersion`.
 
 ```go
-// import routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"
 // Explicitly use ExactMatchPolicy (same as default behavior):
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithRoutingPolicy(routing.ExactMatchPolicy{}),
+  sqsrouter.WithRoutingPolicy(sqsrouter.ExactMatchPolicy{}),
 )
 ```
 
@@ -192,12 +189,12 @@ router, _ := sqsrouter.NewRouter(
 ```
 sqsrouter/
 ├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
-├── policy/
-│   ├── failure/                # Failure policy (ImmediateDeletePolicy, SQSRedrivePolicy)
-│   └── routing/                # Routing policy (ExactMatchPolicy, custom implementations)
 ├── internal/jsonschema/        # JSON schema validation utilities
 ├── router.go                   # Routing by type/version, schema validation, handler registry
 ├── types.go                    # Public types and interfaces
+├── failure.go                  # Failure types and interfaces
+├── failure_policy_*.go         # Built-in failure policies
+├── routing_exact_match.go      # Default exact-match routing policy
 ├── example/
 │   └── basic/                  # Minimal runnable example
 ├── test/

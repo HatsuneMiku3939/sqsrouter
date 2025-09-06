@@ -50,15 +50,15 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }
   - func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer
   - func (c *Consumer) Start(ctx context.Context)
-- policy/failure/
+- Failure policy (top-level)
   - type FailureKind (FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerError, FailHandlerPanic, FailMiddlewareError)
-  - type Result { ShouldDelete bool; Error error }
-  - type FailurePolicy interface { Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result }
+  - type FailureResult { ShouldDelete bool; Error error }
+  - type FailurePolicy interface { Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult }
   - ImmediateDeletePolicy: delete on structural/permanent failures; preserve handler intent on handler/middleware errors
   - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
-- policy/routing/
+- Routing policy (top-level)
   - ExactMatchPolicy: choose handler exactly matching messageType:messageVersion
-  - Usage: import as `routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"` and pass with `WithRoutingPolicy(routing.ExactMatchPolicy{})`
+  - Usage: pass with `WithRoutingPolicy(sqsrouter.ExactMatchPolicy{})`
 
 ## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.
@@ -114,7 +114,7 @@ go mod tidy
 - Consider idempotency for side-effecting handlers.
 
 ## Extending
-- New FailurePolicy: implement failure.FailurePolicy and pass with WithFailurePolicy(...) when creating Router.
+- New FailurePolicy: implement sqsrouter.FailurePolicy and pass with WithFailurePolicy(...) when creating Router.
 - New RoutingPolicy: implement sqsrouter.RoutingPolicy and pass with WithRoutingPolicy(...).
 - New Middleware: implement Middleware and register via router.Use(...).
 - New Handlers: router.Register("Type", "Version", handler) and (optionally) RegisterSchema.

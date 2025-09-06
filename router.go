@@ -29,6 +29,20 @@ func (e coreFailureErr) Error() string {
 // Unwrap returns the underlying error cause.
 func (e coreFailureErr) Unwrap() error { return e.cause }
 
+// defaultExactMatchPolicy implements RoutingPolicy without importing policy/routing
+// to avoid an import cycle. It selects the exact messageType:messageVersion key.
+type defaultExactMatchPolicy struct{}
+
+func (defaultExactMatchPolicy) Decide(_ context.Context, envelope *MessageEnvelope, available []HandlerKey) HandlerKey { //nolint:revive
+	want := HandlerKey(makeKey(envelope.MessageType, envelope.MessageVersion))
+	for _, k := range available {
+		if k == want {
+			return k
+		}
+	}
+	return ""
+}
+
 // NewRouter creates and initializes a new Router with a given envelope schema.
 func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 	loader := jsonschema.NewStringLoader(envelopeSchema)
@@ -41,7 +55,7 @@ func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error) {
 		schemas:        make(map[string]jsonschema.JSONLoader),
 		envelopeSchema: loader,
 		middlewares:    nil,
-		routingPolicy:  nil,
+		routingPolicy:  defaultExactMatchPolicy{},
 		failurePolicy:  failure.ImmediateDeletePolicy{},
 	}
 	for _, opt := range opts {
@@ -138,19 +152,14 @@ func (r *Router) coreRoute(ctx context.Context, state *RouteState) (RoutedResult
 		return rr, coreFailureErr{kind: failure.FailEnvelopeParse, cause: rr.HandlerResult.Error}
 	}
 	state.Envelope = &envelope
-	// Decide handler using routing policy (default exact-match when nil).
-	var decided HandlerKey
-	if r.routingPolicy == nil {
-		decided = HandlerKey(makeKey(envelope.MessageType, envelope.MessageVersion))
-	} else {
-		r.mu.RLock()
-		available := make([]HandlerKey, 0, len(r.handlers))
-		for k := range r.handlers {
-			available = append(available, HandlerKey(k))
-		}
-		r.mu.RUnlock()
-		decided = r.routingPolicy.Decide(ctx, &envelope, available)
+	// Decide handler using routing policy.
+	r.mu.RLock()
+	available := make([]HandlerKey, 0, len(r.handlers))
+	for k := range r.handlers {
+		available = append(available, HandlerKey(k))
 	}
+	r.mu.RUnlock()
+	decided := r.routingPolicy.Decide(ctx, &envelope, available)
 	state.HandlerKey = string(decided)
 
 	// Step 3: Resolve handler and optional payload schema under read lock.

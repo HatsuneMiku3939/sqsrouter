@@ -7,23 +7,39 @@ import (
     "github.com/hatsunemiku3939/sqsrouter"
 )
 
-func TestExactMatchPolicy_SelectsExactKey(t *testing.T) {
+func TestExactMatchPolicy_Table(t *testing.T) {
+    t.Parallel()
     p := ExactMatchPolicy{}
-    env := &sqsrouter.MessageEnvelope{MessageType: "A", MessageVersion: "v1"}
-    keys := []sqsrouter.HandlerKey{"A:v0", "A:v1", "B:v1"}
-    got := p.Decide(context.Background(), env, keys)
-    if string(got) != "A:v1" {
-        t.Fatalf("expected A:v1, got %q", got)
+    ctx := context.Background()
+
+    cases := []struct {
+        name string
+        env  sqsrouter.MessageEnvelope
+        keys []sqsrouter.HandlerKey
+        want sqsrouter.HandlerKey
+    }{
+        {
+            name: "selects exact match",
+            env:  sqsrouter.MessageEnvelope{MessageType: "A", MessageVersion: "v1"},
+            keys: []sqsrouter.HandlerKey{"A:v0", "A:v1", "B:v1"},
+            want: sqsrouter.HandlerKey("A:v1"),
+        },
+        {
+            name: "returns empty when missing",
+            env:  sqsrouter.MessageEnvelope{MessageType: "A", MessageVersion: "v9"},
+            keys: []sqsrouter.HandlerKey{"A:v0", "B:v1"},
+            want: sqsrouter.HandlerKey(""),
+        },
+    }
+
+    for _, tc := range cases {
+        tc := tc
+        t.Run(tc.name, func(t *testing.T) {
+            t.Parallel()
+            got := p.Decide(ctx, &tc.env, tc.keys)
+            if got != tc.want {
+                t.Fatalf("want %q, got %q", tc.want, got)
+            }
+        })
     }
 }
-
-func TestExactMatchPolicy_ReturnsEmptyWhenMissing(t *testing.T) {
-    p := ExactMatchPolicy{}
-    env := &sqsrouter.MessageEnvelope{MessageType: "A", MessageVersion: "v9"}
-    keys := []sqsrouter.HandlerKey{"A:v0", "B:v1"}
-    got := p.Decide(context.Background(), env, keys)
-    if got != "" {
-        t.Fatalf("expected empty key, got %q", got)
-    }
-}
-

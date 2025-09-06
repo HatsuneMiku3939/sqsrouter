@@ -162,6 +162,15 @@ router, _ := sqsrouter.NewRouter(
 Customize how handlers are selected for a message. Default is exact match on `messageType:messageVersion`.
 
 ```go
+// import routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"
+// Explicitly use ExactMatchPolicy (same as default behavior):
+router, _ := sqsrouter.NewRouter(
+  sqsrouter.EnvelopeSchema,
+  sqsrouter.WithRoutingPolicy(routing.ExactMatchPolicy{}),
+)
+```
+
+```go
 // Define a custom routing policy by implementing sqsrouter.RoutingPolicy
 type MyRoutingPolicy struct{}
 func (MyRoutingPolicy) Decide(ctx context.Context, env *sqsrouter.MessageEnvelope, available []sqsrouter.HandlerKey) sqsrouter.HandlerKey {
@@ -183,7 +192,9 @@ router, _ := sqsrouter.NewRouter(
 ```
 sqsrouter/
 ├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
-├── policy/                     # Failure policy definitions and implementations
+├── policy/
+│   ├── failure/                # Failure policy (ImmediateDeletePolicy, SQSRedrivePolicy)
+│   └── routing/                # Routing policy (ExactMatchPolicy, custom implementations)
 ├── internal/jsonschema/        # JSON schema validation utilities
 ├── router.go                   # Routing by type/version, schema validation, handler registry
 ├── types.go                    # Public types and interfaces

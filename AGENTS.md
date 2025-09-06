@@ -58,10 +58,11 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
 - policy/routing/
   - ExactMatchPolicy: choose handler exactly matching messageType:messageVersion
+  - Usage: import as `routing "github.com/hatsunemiku3939/sqsrouter/policy/routing"` and pass with `WithRoutingPolicy(routing.ExactMatchPolicy{})`
 
 ## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.
-2) Unmarshal envelope; collect available handler keys; ask RoutingPolicy for selected key.
+2) Unmarshal envelope; collect available handler keys; ask RoutingPolicy for selected key (if nil, exact-match is used).
 3) Resolve handler and optional payload schema.
 4) If schema exists, validate payload.
 5) Prepare metadata JSON and call handler(message, metadata).

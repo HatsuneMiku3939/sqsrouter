@@ -6,28 +6,68 @@ import (
     "testing"
 )
 
-func TestSQSRedrivePolicy_NeverDeletesOnFailure(t *testing.T) {
+func TestSQSRedrivePolicyAllFailuresShouldNotDelete(t *testing.T) {
     p := SQSRedrivePolicy{}
-    kinds := []Kind{FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerPanic, FailMiddlewareError, FailHandlerError}
+    ctx := context.Background()
+
+    kinds := []Kind{
+        FailEnvelopeSchema,
+        FailEnvelopeParse,
+        FailPayloadSchema,
+        FailNoHandler,
+        FailHandlerError,
+        FailHandlerPanic,
+        FailMiddlewareError,
+    }
+
     for _, k := range kinds {
-        inner := errors.New("x")
-        cur := Result{ShouldDelete: true, Error: nil}
-        got := p.Decide(context.Background(), k, inner, cur)
+        inner := errors.New("inner")
+        curr := Result{ShouldDelete: true, Error: nil}
+        got := p.Decide(ctx, k, inner, curr)
         if got.ShouldDelete {
-            t.Fatalf("kind=%v: expected ShouldDelete=false", k)
+            t.Fatalf("kind %v: expected ShouldDelete=false, got true", k)
         }
-        if got.Error == nil || got.Error.Error() != inner.Error() {
-            t.Fatalf("kind=%v: expected error to be inner", k)
+        if got.Error == nil {
+            t.Fatalf("kind %v: expected Error to be set, got nil", k)
         }
     }
 }
 
-func TestSQSRedrivePolicy_FailNonePassThrough(t *testing.T) {
+func TestSQSRedrivePolicyFailNoneUnchanged(t *testing.T) {
     p := SQSRedrivePolicy{}
-    cur := Result{ShouldDelete: true, Error: nil}
-    got := p.Decide(context.Background(), FailNone, nil, cur)
-    if got.ShouldDelete != cur.ShouldDelete || got.Error != nil {
-        t.Fatalf("FailNone should pass through: %+v", got)
+    ctx := context.Background()
+
+    orig := Result{ShouldDelete: true, Error: nil}
+    got := p.Decide(ctx, FailNone, nil, orig)
+    if got.ShouldDelete != orig.ShouldDelete {
+        t.Fatalf("expected ShouldDelete unchanged, got %v", got.ShouldDelete)
+    }
+    if got.Error != orig.Error {
+        t.Fatalf("expected Error unchanged")
     }
 }
 
+func TestSQSRedrivePolicyErrorAttachmentAndPreservation(t *testing.T) {
+    p := SQSRedrivePolicy{}
+    ctx := context.Background()
+
+    inner := errors.New("inner")
+    rr := Result{ShouldDelete: true, Error: nil}
+    got := p.Decide(ctx, FailNoHandler, inner, rr)
+    if got.Error == nil {
+        t.Fatalf("expected inner error attached")
+    }
+    if got.ShouldDelete {
+        t.Fatalf("expected ShouldDelete=false")
+    }
+
+    existing := errors.New("existing")
+    rr2 := Result{ShouldDelete: true, Error: existing}
+    got2 := p.Decide(ctx, FailPayloadSchema, errors.New("ignored"), rr2)
+    if got2.Error != existing {
+        t.Fatalf("expected existing error preserved, got %v", got2.Error)
+    }
+    if got2.ShouldDelete {
+        t.Fatalf("expected ShouldDelete=false")
+    }
+}

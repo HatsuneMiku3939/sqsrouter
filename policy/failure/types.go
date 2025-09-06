@@ -1,20 +1,20 @@
-package policy
+package failure
 
 import "context"
 
-// FailureKind enumerates where in the pipeline a failure occurred.
-type FailureKind int
+// Kind enumerates where in the pipeline a failure occurred.
+type Kind int
 
 const (
 	// FailNone indicates no failure occurred.
-	FailNone FailureKind = iota
+	FailNone Kind = iota
 	// FailEnvelopeSchema indicates the outer envelope JSON failed schema validation.
 	FailEnvelopeSchema
 	// FailEnvelopeParse indicates the outer envelope JSON could not be parsed.
 	FailEnvelopeParse
 	// FailPayloadSchema indicates the inner message payload failed its registered schema validation.
 	FailPayloadSchema
-	// FailNoHandler indicates no handler was registered for the message type/version.
+	// FailNoHandler indicates no handler was registered or selected for the message.
 	FailNoHandler
 	// FailHandlerError indicates the user handler returned a non-nil error.
 	// Policy may choose to respect or override the handler's ShouldDelete decision.
@@ -33,5 +33,5 @@ type Result struct {
 
 // Policy decides the final Result given a failure classification and current decision.
 type Policy interface {
-	Decide(ctx context.Context, kind FailureKind, inner error, current Result) Result
+	Decide(ctx context.Context, kind Kind, inner error, current Result) Result
 }

@@ -13,7 +13,7 @@ A Go library to route and process Amazon SQS messages by type and version, with 
 - Message routing by messageType and messageVersion
 - Optional JSON Schema validation per type/version
 - Composable middleware chain
-- Clear delete vs retry contract via Policy and handler results
+- Clear delete vs retry contract via FailurePolicy and handler results
 - Concurrent processing, timeouts, and graceful shutdown
 
 ## Table of Contents
@@ -139,10 +139,10 @@ router.Use(mws...)
 - Preserves handler intent for HandlerError or MiddlewareError.
 
 ```go
-// import "github.com/hatsunemiku3939/sqsrouter/policy"
+// import failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithPolicy(policy.ImmediateDeletePolicy{}),
+  sqsrouter.WithFailurePolicy(failure.ImmediateDeletePolicy{}),
 )
 ```
 
@@ -150,9 +150,32 @@ router, _ := sqsrouter.NewRouter(
 - Never deletes on failures; retries and DLQ routing are delegated to SQS redrive.
 
 ```go
+// import failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithPolicy(policy.SQSRedrivePolicy{}),
+  sqsrouter.WithFailurePolicy(failure.SQSRedrivePolicy{}),
+)
+```
+
+## Routing Policies
+
+Customize how handlers are selected for a message. Default is exact match on `messageType:messageVersion`.
+
+```go
+// Define a custom routing policy by implementing sqsrouter.RoutingPolicy
+type MyRoutingPolicy struct{}
+func (MyRoutingPolicy) Decide(ctx context.Context, env *sqsrouter.MessageEnvelope, available []sqsrouter.HandlerKey) sqsrouter.HandlerKey {
+  // Example: fallback to v1 if exact match not found
+  want := sqsrouter.HandlerKey(env.MessageType + ":" + env.MessageVersion)
+  for _, k := range available { if k == want { return k } }
+  fallback := sqsrouter.HandlerKey(env.MessageType + ":v1")
+  for _, k := range available { if k == fallback { return k } }
+  return ""
+}
+
+router, _ := sqsrouter.NewRouter(
+  sqsrouter.EnvelopeSchema,
+  sqsrouter.WithRoutingPolicy(MyRoutingPolicy{}),
 )
 ```
 

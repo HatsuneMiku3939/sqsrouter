@@ -9,7 +9,7 @@ import (
 
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
-    "github.com/hatsunemiku3939/sqsrouter/policy"
+    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 const (
@@ -151,11 +151,11 @@ func TestRouter_Route(t *testing.T) {
 	})
 
     t.Run("policy can override handler error decision", func(t *testing.T) {
-        // Custom policy that forces retry on handler errors regardless of handler's ShouldDelete
-        tp := policy.Policy(policy.ImmediateDeletePolicy{})
+        // Custom failure policy that forces retry on handler errors regardless of handler's ShouldDelete
+        tp := failure.FailurePolicy(failure.ImmediateDeletePolicy{})
         // Wrap ImmediateDeletePolicy with a decorator behavior for this test
-        tp = policy.Policy(policyFunc(func(ctx context.Context, kind policy.FailureKind, inner error, current policy.Result) policy.Result {
-            if kind == policy.FailHandlerError {
+        tp = failure.FailurePolicy(policyFunc(func(ctx context.Context, kind failure.FailureKind, inner error, current failure.Result) failure.Result {
+            if kind == failure.FailHandlerError {
                 current.ShouldDelete = false
                 if inner != nil && current.Error == nil {
                     current.Error = inner
@@ -163,7 +163,7 @@ func TestRouter_Route(t *testing.T) {
             }
             return current
         }))
-        r, err := NewRouter(testEnvelopeSchema, WithPolicy(tp))
+        r, err := NewRouter(testEnvelopeSchema, WithFailurePolicy(tp))
         require.NoError(t, err)
         // Handler asks to delete even on error
         r.Register(testMessageType, testMessageVersion, func(_ context.Context, _, _ []byte) HandlerResult {
@@ -272,10 +272,10 @@ func TestRouter_Route(t *testing.T) {
 
 }
 
-// policyFunc allows using a function as a policy.Policy for tests.
-type policyFunc func(ctx context.Context, kind policy.FailureKind, inner error, current policy.Result) policy.Result
+// policyFunc allows using a function as a failure.FailurePolicy for tests.
+type policyFunc func(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result
 
-func (f policyFunc) Decide(ctx context.Context, kind policy.FailureKind, inner error, current policy.Result) policy.Result {
+func (f policyFunc) Decide(ctx context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
     return f(ctx, kind, inner, current)
 }
 

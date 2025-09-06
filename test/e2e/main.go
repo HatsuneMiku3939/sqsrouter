@@ -14,7 +14,7 @@ import (
     "github.com/aws/aws-sdk-go-v2/service/sqs"
     "github.com/hatsunemiku3939/sqsrouter"
     "github.com/hatsunemiku3939/sqsrouter/consumer"
-    "github.com/hatsunemiku3939/sqsrouter/policy"
+    failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 )
 
 const (
@@ -101,13 +101,13 @@ func E2EMiddleware() sqsrouter.Middleware {
 	return func(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc { return mw.handler(next) }
 }
 
-// forceRetryOnHandlerErr is a custom Policy used in E2E to demonstrate that
-// handler errors are passed through Policy and can be centrally overridden.
+// forceRetryOnHandlerErr is a custom FailurePolicy used in E2E to demonstrate that
+// handler errors are passed through policy and can be centrally overridden.
 type forceRetryOnHandlerErr struct{}
 
-// Decide implements the Policy interface for the custom behavior.
-func (forceRetryOnHandlerErr) Decide(_ context.Context, kind policy.FailureKind, inner error, current policy.Result) policy.Result {
-    if kind == policy.FailHandlerError {
+// Decide implements the FailurePolicy interface for the custom behavior.
+func (forceRetryOnHandlerErr) Decide(_ context.Context, kind failure.Kind, inner error, current failure.Result) failure.Result {
+    if kind == failure.FailHandlerError {
         current.ShouldDelete = false
         if inner != nil && current.Error == nil {
             current.Error = inner
@@ -156,7 +156,7 @@ func main() {
     var opts []sqsrouter.RouterOption
     if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
         // Custom policy: turn any handler error into a retry (ShouldDelete=false)
-        opts = append(opts, sqsrouter.WithPolicy(forceRetryOnHandlerErr{}))
+        opts = append(opts, sqsrouter.WithFailurePolicy(forceRetryOnHandlerErr{}))
     }
 
 	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, opts...)

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/hatsunemiku3939/sqsrouter/policy"
+	failure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -73,8 +73,19 @@ type Router struct {
 	schemas        map[string]gojsonschema.JSONLoader
 	envelopeSchema gojsonschema.JSONLoader
 
-	middlewares []Middleware
-	policy      policy.Policy
+	middlewares   []Middleware
+	routingPolicy RoutingPolicy
+	failurePolicy failure.Policy
 }
 
 // (no consumer types here; moved to consumer package)
+
+// HandlerKey is the unique identifier for a registered handler (e.g., "messageType:messageVersion").
+type HandlerKey string
+
+// RoutingPolicy decides which handler should process an incoming message.
+// Implementations may perform exact match, version fallback, A/B testing, etc.
+// Returning an empty HandlerKey means no handler selected.
+type RoutingPolicy interface {
+	Decide(ctx context.Context, envelope *MessageEnvelope, availableHandlers []HandlerKey) HandlerKey
+}

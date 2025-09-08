@@ -1,14 +1,16 @@
 package sqsrouter
 
 import (
-    "context"
-    "errors"
-    "fmt"
-    "sync"
-    "testing"
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
 
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	policyfailure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+	"github.com/hatsunemiku3939/sqsrouter/spec"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -49,16 +51,16 @@ func newTestRouter(t *testing.T) *Router {
 	return r
 }
 
-func testSuccessHandler(_ context.Context, _, _ []byte) HandlerResult {
-	return HandlerResult{ShouldDelete: true, Error: nil}
+func testSuccessHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+	return spec.HandlerResult{ShouldDelete: true, Error: nil}
 }
 
-func testErrorHandler(_ context.Context, _, _ []byte) HandlerResult {
-	return HandlerResult{ShouldDelete: true, Error: errors.New("handler failed")}
+func testErrorHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+	return spec.HandlerResult{ShouldDelete: true, Error: errors.New("handler failed")}
 }
 
-func testRetryHandler(_ context.Context, _, _ []byte) HandlerResult {
-	return HandlerResult{ShouldDelete: false, Error: errors.New("transient error")}
+func testRetryHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+	return spec.HandlerResult{ShouldDelete: false, Error: errors.New("transient error")}
 }
 
 func createTestMessage(t *testing.T, msgType, msgVersion, payload string) []byte {
@@ -149,25 +151,25 @@ func TestRouter_Route(t *testing.T) {
 		assert.True(t, result.HandlerResult.ShouldDelete)
 	})
 
-    t.Run("policy can override handler error decision", func(t *testing.T) {
-        // Custom failure policy that forces retry on handler errors regardless of handler's ShouldDelete
-        tp := FailurePolicy(ImmediateDeletePolicy{})
-        // Wrap ImmediateDeletePolicy with a decorator behavior for this test
-        tp = FailurePolicy(policyFunc(func(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult {
-            if kind == FailHandlerError {
-                current.ShouldDelete = false
-                if inner != nil && current.Error == nil {
-                    current.Error = inner
-                }
-            }
-            return current
-        }))
-        r, err := NewRouter(testEnvelopeSchema, WithFailurePolicy(tp))
-        require.NoError(t, err)
-        // Handler asks to delete even on error
-        r.Register(testMessageType, testMessageVersion, func(_ context.Context, _, _ []byte) HandlerResult {
-            return HandlerResult{ShouldDelete: true, Error: errors.New("boom")}
-        })
+	t.Run("policy can override handler error decision", func(t *testing.T) {
+		// Custom failure policy that forces retry on handler errors regardless of handler's ShouldDelete
+		base := policyfailure.ImmediateDeletePolicy{}
+		tp := policyFunc(func(ctx context.Context, kind spec.FailureKind, inner error, current spec.FailureResult) spec.FailureResult {
+			if kind == spec.FailHandlerError {
+				current.ShouldDelete = false
+				if inner != nil && current.Error == nil {
+					current.Error = inner
+				}
+				return current
+			}
+			return base.Decide(ctx, kind, inner, current)
+		})
+		r, err := NewRouter(testEnvelopeSchema, WithFailurePolicy(tp))
+		require.NoError(t, err)
+		// Handler asks to delete even on error
+		r.Register(testMessageType, testMessageVersion, func(_ context.Context, _, _ []byte) spec.HandlerResult {
+			return spec.HandlerResult{ShouldDelete: true, Error: errors.New("boom")}
+		})
 
 		payload := `{"userId": "123", "username": "test"}`
 		msg := createTestMessage(t, testMessageType, testMessageVersion, payload)
@@ -248,9 +250,9 @@ func TestRouter_Route(t *testing.T) {
 		r := newTestRouter(t)
 
 		called := false
-		r.Register(testMessageType, testMessageVersion, func(ctx context.Context, msg, meta []byte) HandlerResult {
+		r.Register(testMessageType, testMessageVersion, func(ctx context.Context, msg, meta []byte) spec.HandlerResult {
 			called = true
-			return HandlerResult{ShouldDelete: true, Error: nil}
+			return spec.HandlerResult{ShouldDelete: true, Error: nil}
 		})
 
 		payload := `{"userId": "123", "username": "test"}`
@@ -272,10 +274,10 @@ func TestRouter_Route(t *testing.T) {
 }
 
 // policyFunc allows using a function as a sqsrouter.FailurePolicy for tests.
-type policyFunc func(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult
+type policyFunc func(ctx context.Context, kind spec.FailureKind, inner error, current spec.FailureResult) spec.FailureResult
 
-func (f policyFunc) Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult {
-    return f(ctx, kind, inner, current)
+func (f policyFunc) Decide(ctx context.Context, kind spec.FailureKind, inner error, current spec.FailureResult) spec.FailureResult {
+	return f(ctx, kind, inner, current)
 }
 
 func TestRouter_Concurrency(t *testing.T) {

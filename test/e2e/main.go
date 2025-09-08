@@ -1,19 +1,20 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "os"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
-    "github.com/aws/aws-sdk-go-v2/aws"
-    "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/aws/aws-sdk-go-v2/service/sqs"
-    "github.com/hatsunemiku3939/sqsrouter"
-    "github.com/hatsunemiku3939/sqsrouter/consumer"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/hatsunemiku3939/sqsrouter"
+	"github.com/hatsunemiku3939/sqsrouter/consumer"
+	"github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 const (
@@ -28,10 +29,10 @@ type E2ETestMessage struct {
 }
 
 // E2ETestHandler handles the logic for the e2e test message.
-func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte) sqsrouter.HandlerResult {
+func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte) spec.HandlerResult {
 	var msg E2ETestMessage
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
-		return sqsrouter.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal e2e test message: %w", err)}
+		return spec.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal e2e test message: %w", err)}
 	}
 
 	// For the e2e test, we just log the message content.
@@ -39,15 +40,15 @@ func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte
 	log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s", msg.TestID, msg.Payload)
 	// If enabled, force an application-level error to exercise policy behavior.
 	if os.Getenv("E2E_HANDLER_FORCE_ERR") == "1" {
-		return sqsrouter.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("e2e handler forced error")}
+		return spec.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("e2e handler forced error")}
 	}
-	return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
+	return spec.HandlerResult{ShouldDelete: true, Error: nil}
 }
 
 type e2eMiddleware struct{}
 
-func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc {
-	return func(ctx context.Context, s *sqsrouter.RouteState) (sqsrouter.RoutedResult, error) {
+func (e e2eMiddleware) handler(next spec.HandlerFunc) spec.HandlerFunc {
+	return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 		if s != nil && s.Envelope != nil {
 			log.Printf("E2E_MW_BEFORE type=%s version=%s", s.Envelope.MessageType, s.Envelope.MessageVersion)
 		} else {
@@ -62,10 +63,10 @@ func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc
 				mt = s.Envelope.MessageType
 				mv = s.Envelope.MessageVersion
 			}
-			rr := sqsrouter.RoutedResult{
+			rr := spec.RoutedResult{
 				MessageType:    mt,
 				MessageVersion: mv,
-				HandlerResult: sqsrouter.HandlerResult{
+				HandlerResult: spec.HandlerResult{
 					ShouldDelete: false,
 					Error:        err,
 				},
@@ -95,9 +96,9 @@ func (e e2eMiddleware) handler(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc
 	}
 }
 
-func E2EMiddleware() sqsrouter.Middleware {
+func E2EMiddleware() spec.Middleware {
 	mw := e2eMiddleware{}
-	return func(next sqsrouter.HandlerFunc) sqsrouter.HandlerFunc { return mw.handler(next) }
+	return func(next spec.HandlerFunc) spec.HandlerFunc { return mw.handler(next) }
 }
 
 // forceRetryOnHandlerErr is a custom FailurePolicy used in E2E to demonstrate that
@@ -105,14 +106,14 @@ func E2EMiddleware() sqsrouter.Middleware {
 type forceRetryOnHandlerErr struct{}
 
 // Decide implements the FailurePolicy interface for the custom behavior.
-func (forceRetryOnHandlerErr) Decide(_ context.Context, kind sqsrouter.FailureKind, inner error, current sqsrouter.FailureResult) sqsrouter.FailureResult {
-    if kind == sqsrouter.FailHandlerError {
-        current.ShouldDelete = false
-        if inner != nil && current.Error == nil {
-            current.Error = inner
-        }
-    }
-    return current
+func (forceRetryOnHandlerErr) Decide(_ context.Context, kind spec.FailureKind, inner error, current spec.FailureResult) spec.FailureResult {
+	if kind == spec.FailHandlerError {
+		current.ShouldDelete = false
+		if inner != nil && current.Error == nil {
+			current.Error = inner
+		}
+	}
+	return current
 }
 
 func main() {
@@ -152,11 +153,11 @@ func main() {
 	sqsClient := sqs.NewFromConfig(cfg)
 
 	// Optionally install a custom policy that forces retry for handler errors.
-    var opts []sqsrouter.RouterOption
-    if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
-        // Custom policy: turn any handler error into a retry (ShouldDelete=false)
-        opts = append(opts, sqsrouter.WithFailurePolicy(forceRetryOnHandlerErr{}))
-    }
+	var opts []sqsrouter.RouterOption
+	if os.Getenv("E2E_POLICY_FORCE_RETRY_ON_HANDLER_ERR") == "1" {
+		// Custom policy: turn any handler error into a retry (ShouldDelete=false)
+		opts = append(opts, sqsrouter.WithFailurePolicy(forceRetryOnHandlerErr{}))
+	}
 
 	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema, opts...)
 	if err != nil {
@@ -179,8 +180,8 @@ func main() {
 
 	router.Register(MsgTypeE2ETest, MsgVersion1_0, E2ETestHandler)
 
-    c := consumer.NewConsumer(sqsClient, queueURL, router)
-    c.Start(appCtx)
+	c := consumer.NewConsumer(sqsClient, queueURL, router)
+	c.Start(appCtx)
 
 	log.Println("Application has shut down.")
 }

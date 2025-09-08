@@ -188,21 +188,27 @@ router, _ := sqsrouter.NewRouter(
 ## Project Structure
 ```
 sqsrouter/
-├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
-├── internal/jsonschema/        # JSON schema validation utilities
-├── router.go                   # Routing by type/version, schema validation, handler registry
-├── types.go                    # Public types and interfaces
-├── failure.go                  # Failure types and interfaces
-├── failure_policy_*.go         # Built-in failure policies
-├── routing_exact_match.go      # Default exact-match routing policy
+├── consumer/                    # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
+├── internal/jsonschema/         # JSON schema validation utilities
+├── policy/
+│   ├── failure/                 # Built-in failure policies (ImmediateDeletePolicy, SQSRedrivePolicy)
+│   └── routing/                 # Built-in routing policies (ExactMatchPolicy)
+├── spec/                        # Public API contract: core types and interfaces
+├── router.go                    # Routing by type/version, schema validation, handler registry
+├── types.go                     # Backward-compat: re-exports types from spec
+├── failure.go                   # Backward-compat: re-exports failure kinds from spec
+├── policy_alias.go              # Backward-compat: re-exports built-in policies
 ├── example/
-│   └── basic/                  # Minimal runnable example
+│   └── basic/                   # Minimal runnable example
 ├── test/
-│   ├── docker-compose.yaml     # LocalStack for SQS
-│   ├── e2e.sh                  # End-to-end test runner
-│   └── e2e/                    # E2E test application
-└── .github/workflows/test.yaml # CI: lint, unit, e2e
+│   ├── docker-compose.yaml      # LocalStack for SQS
+│   ├── e2e.sh                   # End-to-end test runner
+│   └── e2e/                     # E2E test application
+└── .github/workflows/test.yaml  # CI: lint, unit, e2e
 ```
+
+Notes:
+- Root package re-exports types and policies for compatibility. New code may import `spec` and `policy/*` directly if desired.
 
 ## Requirements
 - Go: 1.24.x (see go.mod)

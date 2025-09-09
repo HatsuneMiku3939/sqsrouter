@@ -48,7 +48,7 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - func (c *Consumer) Start(ctx context.Context)
 - Failure policy
   - spec.FailureKind / spec.FailureResult / spec.FailurePolicy
-  - policy/failure: ImmediateDeletePolicy, SQSRedrivePolicy (also re-exported at root)
+  - policy/failure: ImmediateDeletePolicy, SQSRedrivePolicy
 - Routing policy
   - spec.RoutingPolicy
   - policy/routing: ExactMatchPolicy (also re-exported at root)

@@ -12,8 +12,8 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ## Core Components
 - Router: Validates envelope, optionally validates payload, dispatches to a handler, applies FailurePolicy to produce a RoutedResult.
 - Consumer: Polls SQS via long polling, invokes Router for each message, deletes message only if RoutedResult.ShouldDelete is true.
-- FailurePolicy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy). Built-ins live in `policy/failure` and are re-exported at root.
-- RoutingPolicy: Strategy for selecting a handler key from available registrations (default ExactMatchPolicy). Built-ins live in `policy/routing` and are re-exported at root.
+- FailurePolicy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy). Built-ins live in `policy/failure`.
+- RoutingPolicy: Strategy for selecting a handler key from available registrations (default ExactMatchPolicy). Built-ins live in `policy/routing`.
 - Middleware: Wraps the routing pipeline to add cross-cutting behavior.
 
 ## Message Envelope

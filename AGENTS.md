@@ -51,7 +51,7 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - policy/failure: ImmediateDeletePolicy, SQSRedrivePolicy
 - Routing policy
   - spec.RoutingPolicy
-  - policy/routing: ExactMatchPolicy (also re-exported at root)
+  - policy/routing: ExactMatchPolicy
 
 ## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.

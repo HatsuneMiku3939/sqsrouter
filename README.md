@@ -212,9 +212,6 @@ sqsrouter/
 └── .github/workflows/test.yaml  # CI: lint, unit, e2e
 ```
 
-Notes:
-- Breaking change: public 타입/정책은 `spec`과 `policy/*`에서 제공합니다. 기존 루트 재수출은 제거되었어요.
-
 ## Requirements
 - Go: 1.24.x (see go.mod)
 - AWS SDK for Go v2

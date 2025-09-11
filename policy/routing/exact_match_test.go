@@ -1,8 +1,10 @@
-package sqsrouter
+package routing
 
 import (
     "context"
     "testing"
+
+    "github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 func TestExactMatchPolicy_Table(t *testing.T) {
@@ -12,21 +14,21 @@ func TestExactMatchPolicy_Table(t *testing.T) {
 
     cases := []struct {
         name string
-        env  MessageEnvelope
-        keys []HandlerKey
-        want HandlerKey
+        env  spec.MessageEnvelope
+        keys []spec.HandlerKey
+        want spec.HandlerKey
     }{
         {
             name: "selects exact match",
-            env:  MessageEnvelope{MessageType: "A", MessageVersion: "v1"},
-            keys: []HandlerKey{"A:v0", "A:v1", "B:v1"},
-            want: HandlerKey("A:v1"),
+            env:  spec.MessageEnvelope{MessageType: "A", MessageVersion: "v1"},
+            keys: []spec.HandlerKey{"A:v0", "A:v1", "B:v1"},
+            want: spec.HandlerKey("A:v1"),
         },
         {
             name: "returns empty when missing",
-            env:  MessageEnvelope{MessageType: "A", MessageVersion: "v9"},
-            keys: []HandlerKey{"A:v0", "B:v1"},
-            want: HandlerKey(""),
+            env:  spec.MessageEnvelope{MessageType: "A", MessageVersion: "v9"},
+            keys: []spec.HandlerKey{"A:v0", "B:v1"},
+            want: spec.HandlerKey(""),
         },
     }
 
@@ -41,3 +43,4 @@ func TestExactMatchPolicy_Table(t *testing.T) {
         })
     }
 }
+

@@ -12,8 +12,8 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ## Core Components
 - Router: Validates envelope, optionally validates payload, dispatches to a handler, applies FailurePolicy to produce a RoutedResult.
 - Consumer: Polls SQS via long polling, invokes Router for each message, deletes message only if RoutedResult.ShouldDelete is true.
-- FailurePolicy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy).
-- RoutingPolicy: Strategy for selecting a handler key from available registrations (default ExactMatchPolicy).
+- FailurePolicy: Central decision layer for delete vs retry across failure kinds (ImmediateDeletePolicy, SQSRedrivePolicy). Built-ins live in `policy/failure`.
+- RoutingPolicy: Strategy for selecting a handler key from available registrations (default ExactMatchPolicy). Built-ins live in `policy/routing`.
 - Middleware: Wraps the routing pipeline to add cross-cutting behavior.
 
 ## Message Envelope
@@ -32,13 +32,9 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ```
 
 ## Key Types and APIs
-- types.go
-  - type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
-  - type HandlerFunc func(ctx context.Context, state *RouteState) (RoutedResult, error)
-  - type Middleware func(next HandlerFunc) HandlerFunc
-  - type Router struct { ... }
-  - type HandlerResult { ShouldDelete bool; Error error }
-  - type RoutedResult { MessageType, MessageVersion string; HandlerResult; MessageID, Timestamp string }
+- spec/
+  - types.go: MessageEnvelope, HandlerResult, RoutedResult, RouteState, etc.
+  - interfaces.go: MessageHandler, HandlerFunc, Middleware, RoutingPolicy, FailurePolicy, FailureKind/Result
 - router.go
   - func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error)
   - func (r *Router) Register(messageType, messageVersion string, handler MessageHandler)
@@ -50,15 +46,12 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }
   - func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer
   - func (c *Consumer) Start(ctx context.Context)
-- Failure policy (top-level)
-  - type FailureKind (FailEnvelopeSchema, FailEnvelopeParse, FailPayloadSchema, FailNoHandler, FailHandlerError, FailHandlerPanic, FailMiddlewareError)
-  - type FailureResult { ShouldDelete bool; Error error }
-  - type FailurePolicy interface { Decide(ctx context.Context, kind FailureKind, inner error, current FailureResult) FailureResult }
-  - ImmediateDeletePolicy: delete on structural/permanent failures; preserve handler intent on handler/middleware errors
-  - SQSRedrivePolicy: never delete on failures; rely on SQS redrive/DLQ
-- Routing policy (top-level)
-  - ExactMatchPolicy: choose handler exactly matching messageType:messageVersion
-  - Usage: pass with `WithRoutingPolicy(sqsrouter.ExactMatchPolicy{})`
+- Failure policy
+  - spec.FailureKind / spec.FailureResult / spec.FailurePolicy
+  - policy/failure: ImmediateDeletePolicy, SQSRedrivePolicy
+- Routing policy
+  - spec.RoutingPolicy
+  - policy/routing: ExactMatchPolicy
 
 ## Routing Pipeline (high level)
 1) Validate envelope against EnvelopeSchema.

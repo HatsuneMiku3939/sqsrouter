@@ -3,6 +3,7 @@ package sqsrouter
 import (
 	"context"
 	"errors"
+	"github.com/hatsunemiku3939/sqsrouter/spec"
 	"sync/atomic"
 	"testing"
 )
@@ -16,16 +17,16 @@ func TestMiddlewareOrderAndPrePost(t *testing.T) {
 	var seq int32
 	var seen []int32
 
-	mw1 := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+	mw1 := func(next spec.HandlerFunc) spec.HandlerFunc {
+		return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 			seen = append(seen, atomic.AddInt32(&seq, 1))
 			rr, err := next(ctx, s)
 			seen = append(seen, atomic.AddInt32(&seq, 1))
 			return rr, err
 		}
 	}
-	mw2 := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+	mw2 := func(next spec.HandlerFunc) spec.HandlerFunc {
+		return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 			seen = append(seen, atomic.AddInt32(&seq, 1))
 			rr, err := next(ctx, s)
 			seen = append(seen, atomic.AddInt32(&seq, 1))
@@ -35,8 +36,8 @@ func TestMiddlewareOrderAndPrePost(t *testing.T) {
 
 	router.Use(mw1, mw2)
 
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) HandlerResult {
-		return HandlerResult{ShouldDelete: true, Error: nil}
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 
 	raw := []byte(`{"schemaVersion":"1.0","messageType":"T","messageVersion":"v1","message":{},"metadata":{}}`)
@@ -55,12 +56,12 @@ func TestMiddlewareErrorDoesNotForceDeleteByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new router: %v", err)
 	}
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) HandlerResult {
-		return HandlerResult{ShouldDelete: true, Error: nil}
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 
-	errMW := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+	errMW := func(next spec.HandlerFunc) spec.HandlerFunc {
+		return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 			rr, _ := next(ctx, s)
 			return rr, errors.New("mw error")
 		}
@@ -83,12 +84,12 @@ func TestMiddlewareErrorRespectsHandlerRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new router: %v", err)
 	}
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) HandlerResult {
-		return HandlerResult{ShouldDelete: false, Error: errors.New("transient")}
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+		return spec.HandlerResult{ShouldDelete: false, Error: errors.New("transient")}
 	})
 
-	errMW := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+	errMW := func(next spec.HandlerFunc) spec.HandlerFunc {
+		return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 			rr, _ := next(ctx, s)
 			return rr, errors.New("mw error")
 		}
@@ -113,8 +114,8 @@ func TestMiddlewareRunsWhenNoHandlerRegistered(t *testing.T) {
 	}
 
 	var ran int32
-	mw := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, s *RouteState) (RoutedResult, error) {
+	mw := func(next spec.HandlerFunc) spec.HandlerFunc {
+		return func(ctx context.Context, s *spec.RouteState) (spec.RoutedResult, error) {
 			atomic.AddInt32(&ran, 1)
 			rr, err := next(ctx, s)
 			atomic.AddInt32(&ran, 1)
@@ -137,8 +138,8 @@ func TestNoMiddlewareCompatibility(t *testing.T) {
 		t.Fatalf("new router: %v", err)
 	}
 
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) HandlerResult {
-		return HandlerResult{ShouldDelete: true, Error: nil}
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 
 	raw := []byte(`{"schemaVersion":"1.0","messageType":"T","messageVersion":"v1","message":{},"metadata":{}}`)

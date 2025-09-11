@@ -1,19 +1,20 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/aws/aws-sdk-go-v2/service/sqs"
-    "github.com/hatsunemiku3939/sqsrouter"
-    "github.com/hatsunemiku3939/sqsrouter/consumer"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/hatsunemiku3939/sqsrouter"
+	"github.com/hatsunemiku3939/sqsrouter/consumer"
+	"github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 // --- Schemas ---
@@ -47,12 +48,12 @@ type UserProfileMessage struct {
 // --- Message Handlers ---
 
 // UpdateUserProfileV1Handler handles the logic for updating a user profile.
-func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadataJSON []byte) sqsrouter.HandlerResult {
+func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadataJSON []byte) spec.HandlerResult {
 	var msg UserProfileMessage
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
 		// This error should theoretically not happen if schema validation is correct.
 		// But as a safeguard, we handle it as a permanent failure.
-		return sqsrouter.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal user profile message: %w", err)}
+		return spec.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal user profile message: %w", err)}
 	}
 
 	// In a real application, this is where you would interact with a database or another service.
@@ -63,11 +64,11 @@ func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadat
 	case <-time.After(2 * time.Second): // Simulate 2 seconds of work.
 		log.Printf("INFO: Finished processing for user %s", msg.UserID)
 		// For this example, we assume the operation always succeeds.
-		return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
+		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	case <-ctx.Done(): // This case will be hit if the processingTimeout is exceeded.
 		log.Printf("WARN: Processing canceled for user %s: %v", msg.UserID, ctx.Err())
 		// Return ShouldDelete: false to allow for a retry.
-		return sqsrouter.HandlerResult{ShouldDelete: false, Error: ctx.Err()}
+		return spec.HandlerResult{ShouldDelete: false, Error: ctx.Err()}
 	}
 }
 
@@ -110,8 +111,8 @@ func main() {
 	}
 
 	// --- 4. Setup and Start the Consumer ---
-    c := consumer.NewConsumer(sqsClient, queueURL, router)
-    c.Start(appCtx)
+	c := consumer.NewConsumer(sqsClient, queueURL, router)
+	c.Start(appCtx)
 
 	log.Println("Application has shut down.")
 }

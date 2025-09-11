@@ -1,9 +1,15 @@
-package sqsrouter
+package spec
 
 import "context"
 
+// RoutingPolicy decides which handler should process an incoming message.
+// Implementations may perform exact match, version fallback, A/B testing, etc.
+// Returning an empty HandlerKey means no handler selected.
+type RoutingPolicy interface {
+	Decide(ctx context.Context, envelope *MessageEnvelope, availableHandlers []HandlerKey) HandlerKey
+}
+
 // FailureKind enumerates where in the pipeline a failure occurred.
-// Keeping constant names identical to previous subpackage for continuity.
 type FailureKind int
 
 const (
@@ -18,7 +24,6 @@ const (
 	// FailNoHandler indicates no handler was registered or selected for the message.
 	FailNoHandler
 	// FailHandlerError indicates the user handler returned a non-nil error.
-	// Policy may choose to respect or override the handler's ShouldDelete decision.
 	FailHandlerError
 	// FailHandlerPanic indicates a panic occurred inside user handler or outer recovery.
 	FailHandlerPanic

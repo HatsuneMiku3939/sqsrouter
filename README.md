@@ -45,6 +45,7 @@ package main
 import (
   "context"
   "github.com/hatsunemiku3939/sqsrouter"
+  "github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 func main() {
@@ -53,9 +54,9 @@ func main() {
     panic(err) // handle properly in production
   }
 
-  router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) sqsrouter.HandlerResult {
+  router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
     // parse and process msgJSON; metaJSON contains envelope metadata
-    return sqsrouter.HandlerResult{ShouldDelete: true, Error: nil}
+    return spec.HandlerResult{ShouldDelete: true, Error: nil}
   })
 
   schema := `{
@@ -80,6 +81,9 @@ import (
   "github.com/aws/aws-sdk-go-v2/service/sqs"
   "github.com/hatsunemiku3939/sqsrouter"
   "github.com/hatsunemiku3939/sqsrouter/consumer"
+  policyfailure "github.com/hatsunemiku3939/sqsrouter/policy/failure"
+  policyrouting "github.com/hatsunemiku3939/sqsrouter/policy/routing"
+  "github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 func main() {
@@ -120,7 +124,7 @@ Register middlewares to wrap the routing pipeline:
 ```go
 router.Use(TracingMW(), LoggingMW(), MetricsMW())
 
-mws := []sqsrouter.Middleware{TracingMW(), LoggingMW(), MetricsMW()}
+mws := []spec.Middleware{TracingMW(), LoggingMW(), MetricsMW()}
 router.Use(mws...)
 ```
 
@@ -141,7 +145,8 @@ router.Use(mws...)
 ```go
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithFailurePolicy(sqsrouter.ImmediateDeletePolicy{}),
+  // Built-in policy lives in policy/failure
+  sqsrouter.WithFailurePolicy(policyfailure.ImmediateDeletePolicy{}),
 )
 ```
 
@@ -151,7 +156,7 @@ router, _ := sqsrouter.NewRouter(
 ```go
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithFailurePolicy(sqsrouter.SQSRedrivePolicy{}),
+  sqsrouter.WithFailurePolicy(policyfailure.SQSRedrivePolicy{}),
 )
 ```
 
@@ -160,21 +165,21 @@ router, _ := sqsrouter.NewRouter(
 Customize how handlers are selected for a message. Default is exact match on `messageType:messageVersion`.
 
 ```go
-// Explicitly use ExactMatchPolicy (same as default behavior):
+// Explicitly use ExactMatchPolicy (same as default behavior). Built-in in policy/routing
 router, _ := sqsrouter.NewRouter(
   sqsrouter.EnvelopeSchema,
-  sqsrouter.WithRoutingPolicy(sqsrouter.ExactMatchPolicy{}),
+  sqsrouter.WithRoutingPolicy(policyrouting.ExactMatchPolicy{}),
 )
 ```
 
 ```go
-// Define a custom routing policy by implementing sqsrouter.RoutingPolicy
+// Define a custom routing policy by implementing spec.RoutingPolicy
 type MyRoutingPolicy struct{}
-func (MyRoutingPolicy) Decide(ctx context.Context, env *sqsrouter.MessageEnvelope, available []sqsrouter.HandlerKey) sqsrouter.HandlerKey {
+func (MyRoutingPolicy) Decide(ctx context.Context, env *spec.MessageEnvelope, available []spec.HandlerKey) spec.HandlerKey {
   // Example: fallback to v1 if exact match not found
-  want := sqsrouter.HandlerKey(env.MessageType + ":" + env.MessageVersion)
+  want := spec.HandlerKey(env.MessageType + ":" + env.MessageVersion)
   for _, k := range available { if k == want { return k } }
-  fallback := sqsrouter.HandlerKey(env.MessageType + ":v1")
+  fallback := spec.HandlerKey(env.MessageType + ":v1")
   for _, k := range available { if k == fallback { return k } }
   return ""
 }
@@ -188,20 +193,23 @@ router, _ := sqsrouter.NewRouter(
 ## Project Structure
 ```
 sqsrouter/
-├── consumer/                   # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
-├── internal/jsonschema/        # JSON schema validation utilities
-├── router.go                   # Routing by type/version, schema validation, handler registry
-├── types.go                    # Public types and interfaces
-├── failure.go                  # Failure types and interfaces
-├── failure_policy_*.go         # Built-in failure policies
-├── routing_exact_match.go      # Default exact-match routing policy
+├── consumer/                    # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
+├── internal/jsonschema/         # JSON schema validation utilities
+├── policy/
+│   ├── failure/                 # Built-in failure policies (ImmediateDeletePolicy, SQSRedrivePolicy)
+│   └── routing/                 # Built-in routing policies (ExactMatchPolicy)
+├── spec/                        # Public API contract: core types and interfaces
+├── router.go                    # Routing by type/version, schema validation, handler registry
+├── types.go                     # Backward-compat: re-exports types from spec
+├── failure.go                   # Backward-compat: re-exports failure kinds from spec
+├── policy_alias.go              # Backward-compat: re-exports built-in policies
 ├── example/
-│   └── basic/                  # Minimal runnable example
+│   └── basic/                   # Minimal runnable example
 ├── test/
-│   ├── docker-compose.yaml     # LocalStack for SQS
-│   ├── e2e.sh                  # End-to-end test runner
-│   └── e2e/                    # E2E test application
-└── .github/workflows/test.yaml # CI: lint, unit, e2e
+│   ├── docker-compose.yaml      # LocalStack for SQS
+│   ├── e2e.sh                   # End-to-end test runner
+│   └── e2e/                     # E2E test application
+└── .github/workflows/test.yaml  # CI: lint, unit, e2e
 ```
 
 ## Requirements

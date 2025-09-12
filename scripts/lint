@@ -11,8 +11,8 @@ function ensure_golangci_lint() {
 	local need_install="true"
 	if command -v golangci-lint >/dev/null 2>&1; then
 		local current_version
-		current_version="$(golangci-lint version --format short 2>/dev/null || true)"
-		if [ "$current_version" = "$GOLANGCI_LINT_VERSION" ]; then
+		current_version="$(golangci-lint version --short 2>/dev/null || true)"
+		if [ "v$current_version" = "$GOLANGCI_LINT_VERSION" ]; then
 			need_install="false"
 		fi
 	fi

@@ -66,7 +66,7 @@ func TestConsumer_processMessage(t *testing.T) {
 	}{
 		{
 			name: "success, should delete",
-			handler: func(ctx context.Context, msg []byte, meta []byte) spec.HandlerResult {
+			handler: func(ctx context.Context, msg []byte) spec.HandlerResult {
 				return spec.HandlerResult{ShouldDelete: true, Error: nil}
 			},
 			shouldDelete:     true,
@@ -74,7 +74,7 @@ func TestConsumer_processMessage(t *testing.T) {
 		},
 		{
 			name: "handler error, but should delete",
-			handler: func(ctx context.Context, msg []byte, meta []byte) spec.HandlerResult {
+			handler: func(ctx context.Context, msg []byte) spec.HandlerResult {
 				return spec.HandlerResult{ShouldDelete: true, Error: errors.New("permanent failure")}
 			},
 			shouldDelete:     true,
@@ -82,7 +82,7 @@ func TestConsumer_processMessage(t *testing.T) {
 		},
 		{
 			name: "handler error, should not delete (retry)",
-			handler: func(ctx context.Context, msg []byte, meta []byte) spec.HandlerResult {
+			handler: func(ctx context.Context, msg []byte) spec.HandlerResult {
 				return spec.HandlerResult{ShouldDelete: false, Error: errors.New("transient error")}
 			},
 			shouldDelete:     false,
@@ -90,7 +90,7 @@ func TestConsumer_processMessage(t *testing.T) {
 		},
 		{
 			name: "success, but delete fails",
-			handler: func(ctx context.Context, msg []byte, meta []byte) spec.HandlerResult {
+			handler: func(ctx context.Context, msg []byte) spec.HandlerResult {
 				return spec.HandlerResult{ShouldDelete: true, Error: nil}
 			},
 			shouldDelete:         true,
@@ -156,7 +156,7 @@ func TestConsumer_Start(t *testing.T) {
 
 	// Setup a simple success handler
 	msgType, msgVersion := "test.event", "1.0"
-	router.Register(msgType, msgVersion, func(ctx context.Context, msg []byte, meta []byte) spec.HandlerResult {
+	router.Register(msgType, msgVersion, func(ctx context.Context, msg []byte) spec.HandlerResult {
 		return spec.HandlerResult{ShouldDelete: true}
 	})
 

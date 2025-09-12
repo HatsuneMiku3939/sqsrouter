@@ -34,7 +34,9 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ## Key Types and APIs
 - spec/
   - types.go: MessageEnvelope, HandlerResult, RoutedResult, RouteState, etc.
-  - interfaces.go: MessageHandler, HandlerFunc, Middleware, RoutingPolicy, FailurePolicy, FailureKind/Result
+- interfaces.go: MessageHandler, HandlerFunc, Middleware, RoutingPolicy, FailurePolicy, FailureKind/Result
+- types.go: MessageContext
+- context.go (root): WithMessageContext/GetMessageContext helpers
 - router.go
   - func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error)
   - func (r *Router) Register(messageType, messageVersion string, handler MessageHandler)
@@ -58,7 +60,7 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 2) Unmarshal envelope; collect available handler keys; ask RoutingPolicy for selected key (if nil, exact-match is used).
 3) Resolve handler and optional payload schema.
 4) If schema exists, validate payload.
-5) Prepare metadata JSON and call handler(message, metadata).
+5) Enrich MessageContext in ctx with envelope metadata and call handler(message).
 6) If handler error, consult FailurePolicy; else success.
 7) Middlewares wrap the core; outer guard maps panics to FailHandlerPanic via FailurePolicy.
 

@@ -48,7 +48,7 @@ type UserProfileMessage struct {
 // --- Message Handlers ---
 
 // UpdateUserProfileV1Handler handles the logic for updating a user profile.
-func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadataJSON []byte) spec.HandlerResult {
+func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte) spec.HandlerResult {
 	var msg UserProfileMessage
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
 		// This error should theoretically not happen if schema validation is correct.
@@ -57,7 +57,11 @@ func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte, metadat
 	}
 
 	// In a real application, this is where you would interact with a database or another service.
-	log.Printf("⚙️  Processing user update for %s (ID: %s)", msg.Username, msg.UserID)
+	if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
+		log.Printf("⚙️  Processing user update for %s (ID: %s), receiveCount=%d", msg.Username, msg.UserID, mc.ReceiveCount)
+	} else {
+		log.Printf("⚙️  Processing user update for %s (ID: %s)", msg.Username, msg.UserID)
+	}
 
 	// Simulate work that can be canceled.
 	select {

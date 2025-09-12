@@ -3,7 +3,9 @@ package spec
 import (
 	"context"
 	"encoding/json"
+	"time"
 
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -40,8 +42,9 @@ type RoutedResult struct {
 }
 
 // MessageHandler is a function type that processes a specific message type and version.
-// It receives the message payload and metadata as raw JSON bytes.
-type MessageHandler func(ctx context.Context, messageJSON []byte, metadataJSON []byte) HandlerResult
+// It receives the message payload as raw JSON bytes. Metadata and SQS attributes
+// are accessible via GetMessageContext(ctx).
+type MessageHandler func(ctx context.Context, messageJSON []byte) HandlerResult
 
 // RouteState carries per-message routing context through the middleware and core routing pipeline.
 // It includes the raw message, parsed envelope, handler/schema resolution, and derived metadata.
@@ -64,3 +67,22 @@ type Middleware func(next HandlerFunc) HandlerFunc
 
 // HandlerKey is the unique identifier for a registered handler (e.g., "messageType:messageVersion").
 type HandlerKey string
+
+// MessageContext holds key attributes of an SQS message and envelope metadata.
+// Handlers and middlewares can access it via GetMessageContext(ctx).
+type MessageContext struct {
+	// --- From SQS System Attributes ---
+	ReceiveCount           int
+	SentTimestamp          time.Time
+	FirstReceiveTimestamp  time.Time
+	MessageGroupID         string
+	MessageDeduplicationID string
+
+	// --- From SQS Message Attributes ---
+	CustomAttributes map[string]sqstypes.MessageAttributeValue
+
+	// --- From Message Envelope Metadata ---
+	MessageID string
+	Source    string
+	Timestamp string // Application-level timestamp
+}

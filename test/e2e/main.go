@@ -29,7 +29,7 @@ type E2ETestMessage struct {
 }
 
 // E2ETestHandler handles the logic for the e2e test message.
-func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte) spec.HandlerResult {
+func E2ETestHandler(ctx context.Context, messageJSON []byte) spec.HandlerResult {
 	var msg E2ETestMessage
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
 		return spec.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("failed to unmarshal e2e test message: %w", err)}
@@ -37,7 +37,11 @@ func E2ETestHandler(ctx context.Context, messageJSON []byte, metadataJSON []byte
 
 	// For the e2e test, we just log the message content.
 	// The test script will check the log output for this message.
-	log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s", msg.TestID, msg.Payload)
+	if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
+		log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s rc=%d", msg.TestID, msg.Payload, mc.ReceiveCount)
+	} else {
+		log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s", msg.TestID, msg.Payload)
+	}
 	// If enabled, force an application-level error to exercise policy behavior.
 	if os.Getenv("E2E_HANDLER_FORCE_ERR") == "1" {
 		return spec.HandlerResult{ShouldDelete: true, Error: fmt.Errorf("e2e handler forced error")}

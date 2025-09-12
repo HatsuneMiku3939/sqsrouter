@@ -54,8 +54,11 @@ func main() {
     panic(err) // handle properly in production
   }
 
-  router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
-    // parse and process msgJSON; metaJSON contains envelope metadata
+  router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
+    // parse and process msgJSON; metadata and SQS attributes are available via context
+    if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
+      _ = mc // use mc.MessageID, mc.ReceiveCount, etc.
+    }
     return spec.HandlerResult{ShouldDelete: true, Error: nil}
   })
 

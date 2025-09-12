@@ -199,26 +199,20 @@ func (r *Router) coreRoute(ctx context.Context, state *spec.RouteState) (spec.Ro
 		return rr, coreFailureErr{kind: spec.FailNoHandler, cause: rr.HandlerResult.Error}
 	}
 
-	// Prepare metadata for the handler invocation.
+	// Prepare metadata for the handler invocation and enrich context.
 	meta := envelope.Metadata
 	state.Metadata = &meta
 
-	// Marshal metadata to JSON so handler signature remains stable and decoupled.
-	metaJSON, err := json.Marshal(meta)
-	if err != nil {
-		rr := spec.RoutedResult{
-			MessageType:    envelope.MessageType,
-			MessageVersion: envelope.MessageVersion,
-			HandlerResult: spec.HandlerResult{
-				ShouldDelete: true,
-				Error:        fmt.Errorf("failed to marshal metadata: %w", err),
-			},
-		}
-		return rr, rr.HandlerResult.Error
+	// Enrich MessageContext (if present) with envelope metadata.
+	if mc, ok := GetMessageContext(ctx); ok {
+		mc.MessageID = meta.MessageID
+		mc.Source = meta.Source
+		mc.Timestamp = meta.Timestamp
 	}
-	// Invoke the resolved handler with payload and metadata.
+
+	// Invoke the resolved handler with payload only.
 	// Do not recover here; allow panics to bubble to Route, which maps them to FailHandlerPanic via Policy.
-	handlerResult := handler(ctx, envelope.Message, metaJSON)
+	handlerResult := handler(ctx, envelope.Message)
 
 	// Assemble the routed result from handler output.
 	rr := spec.RoutedResult{

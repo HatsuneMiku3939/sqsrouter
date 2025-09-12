@@ -56,7 +56,7 @@ func main() {
 
   router.Register("UserCreated", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
     // parse and process msgJSON; metadata and SQS attributes are available via context
-    if mc, ok := spec.GetMessageContext(ctx); ok {
+    if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
       _ = mc // use mc.MessageID, mc.ReceiveCount, etc.
     }
     return spec.HandlerResult{ShouldDelete: true, Error: nil}

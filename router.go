@@ -204,7 +204,7 @@ func (r *Router) coreRoute(ctx context.Context, state *spec.RouteState) (spec.Ro
 	state.Metadata = &meta
 
 	// Enrich MessageContext (if present) with envelope metadata.
-	if mc, ok := spec.GetMessageContext(ctx); ok {
+	if mc, ok := GetMessageContext(ctx); ok {
 		mc.MessageID = meta.MessageID
 		mc.Source = meta.Source
 		mc.Timestamp = meta.Timestamp

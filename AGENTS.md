@@ -34,8 +34,9 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 ## Key Types and APIs
 - spec/
   - types.go: MessageEnvelope, HandlerResult, RoutedResult, RouteState, etc.
-  - interfaces.go: MessageHandler, HandlerFunc, Middleware, RoutingPolicy, FailurePolicy, FailureKind/Result
-  - types.go: MessageContext, WithMessageContext/GetMessageContext helpers
+- interfaces.go: MessageHandler, HandlerFunc, Middleware, RoutingPolicy, FailurePolicy, FailureKind/Result
+- types.go: MessageContext
+- context.go (root): WithMessageContext/GetMessageContext helpers
 - router.go
   - func NewRouter(envelopeSchema string, opts ...RouterOption) (*Router, error)
   - func (r *Router) Register(messageType, messageVersion string, handler MessageHandler)

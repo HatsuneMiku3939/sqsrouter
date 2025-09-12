@@ -57,7 +57,7 @@ func UpdateUserProfileV1Handler(ctx context.Context, messageJSON []byte) spec.Ha
 	}
 
 	// In a real application, this is where you would interact with a database or another service.
-	if mc, ok := spec.GetMessageContext(ctx); ok {
+	if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
 		log.Printf("⚙️  Processing user update for %s (ID: %s), receiveCount=%d", msg.Username, msg.UserID, mc.ReceiveCount)
 	} else {
 		log.Printf("⚙️  Processing user update for %s (ID: %s)", msg.Username, msg.UserID)

@@ -97,7 +97,7 @@ func (c *Consumer) Start(ctx context.Context) {
 				msgCtx, cancelMsg := context.WithTimeout(context.Background(), processingTimeout)
 				defer cancelMsg()
 				// Attach MessageContext built from SQS attributes
-				msgCtx = spec.WithMessageContext(msgCtx, buildMessageContext(&m))
+				msgCtx = sqsrouter.WithMessageContext(msgCtx, buildMessageContext(&m))
 				c.processMessage(msgCtx, &m)
 			}(m)
 		}

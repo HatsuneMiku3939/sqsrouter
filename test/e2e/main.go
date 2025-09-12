@@ -37,7 +37,7 @@ func E2ETestHandler(ctx context.Context, messageJSON []byte) spec.HandlerResult 
 
 	// For the e2e test, we just log the message content.
 	// The test script will check the log output for this message.
-	if mc, ok := spec.GetMessageContext(ctx); ok {
+	if mc, ok := sqsrouter.GetMessageContext(ctx); ok {
 		log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s rc=%d", msg.TestID, msg.Payload, mc.ReceiveCount)
 	} else {
 		log.Printf("E2E_TEST_SUCCESS: Received message for test ID %s with payload: %s", msg.TestID, msg.Payload)

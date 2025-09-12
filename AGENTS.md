@@ -123,6 +123,9 @@ go mod tidy
 - Middleware errors are mapped via FailurePolicy once.
 - Panics are caught at the outer guard and mapped to FailHandlerPanic.
 
+## Additional Resources
+- README.md: Overview and getting started.
+
 ## Attribution
 This project was created and maintained with the help of AI tools — Devin, Gemini, and Codex — under human guidance.
 Specifications were defined through conversations with AI, and implementations were carried out by the AI.

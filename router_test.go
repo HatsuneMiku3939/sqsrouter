@@ -51,15 +51,15 @@ func newTestRouter(t *testing.T) *Router {
 	return r
 }
 
-func testSuccessHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+func testSuccessHandler(_ context.Context, _ []byte) spec.HandlerResult {
 	return spec.HandlerResult{ShouldDelete: true, Error: nil}
 }
 
-func testErrorHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+func testErrorHandler(_ context.Context, _ []byte) spec.HandlerResult {
 	return spec.HandlerResult{ShouldDelete: true, Error: errors.New("handler failed")}
 }
 
-func testRetryHandler(_ context.Context, _, _ []byte) spec.HandlerResult {
+func testRetryHandler(_ context.Context, _ []byte) spec.HandlerResult {
 	return spec.HandlerResult{ShouldDelete: false, Error: errors.New("transient error")}
 }
 
@@ -167,7 +167,7 @@ func TestRouter_Route(t *testing.T) {
 		r, err := NewRouter(testEnvelopeSchema, WithFailurePolicy(tp))
 		require.NoError(t, err)
 		// Handler asks to delete even on error
-		r.Register(testMessageType, testMessageVersion, func(_ context.Context, _, _ []byte) spec.HandlerResult {
+		r.Register(testMessageType, testMessageVersion, func(_ context.Context, _ []byte) spec.HandlerResult {
 			return spec.HandlerResult{ShouldDelete: true, Error: errors.New("boom")}
 		})
 
@@ -250,7 +250,7 @@ func TestRouter_Route(t *testing.T) {
 		r := newTestRouter(t)
 
 		called := false
-		r.Register(testMessageType, testMessageVersion, func(ctx context.Context, msg, meta []byte) spec.HandlerResult {
+		r.Register(testMessageType, testMessageVersion, func(ctx context.Context, msg []byte) spec.HandlerResult {
 			called = true
 			return spec.HandlerResult{ShouldDelete: true, Error: nil}
 		})

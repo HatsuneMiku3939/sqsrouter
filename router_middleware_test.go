@@ -36,7 +36,7 @@ func TestMiddlewareOrderAndPrePost(t *testing.T) {
 
 	router.Use(mw1, mw2)
 
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
 		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 
@@ -56,7 +56,7 @@ func TestMiddlewareErrorDoesNotForceDeleteByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new router: %v", err)
 	}
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
 		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 
@@ -84,7 +84,7 @@ func TestMiddlewareErrorRespectsHandlerRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new router: %v", err)
 	}
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
 		return spec.HandlerResult{ShouldDelete: false, Error: errors.New("transient")}
 	})
 
@@ -138,7 +138,7 @@ func TestNoMiddlewareCompatibility(t *testing.T) {
 		t.Fatalf("new router: %v", err)
 	}
 
-	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+	router.Register("T", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
 		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})
 

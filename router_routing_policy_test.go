@@ -33,7 +33,7 @@ func TestRoutingPolicy_AllowsFallbackToV1(t *testing.T) {
 		t.Fatalf("new router: %v", err)
 	}
 	called := false
-	r.Register("T", "v1", func(ctx context.Context, msgJSON []byte, metaJSON []byte) spec.HandlerResult {
+	r.Register("T", "v1", func(ctx context.Context, msgJSON []byte) spec.HandlerResult {
 		called = true
 		return spec.HandlerResult{ShouldDelete: true, Error: nil}
 	})

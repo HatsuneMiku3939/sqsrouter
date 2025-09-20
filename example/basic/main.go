@@ -115,7 +115,8 @@ func main() {
 	}
 
 	// --- 4. Setup and Start the Consumer ---
-	c := consumer.NewConsumer(sqsClient, queueURL, router)
+	// Use StandardConsumer for standard SQS queues (concurrent processing).
+	c := consumer.NewStandardConsumer(sqsClient, queueURL, router)
 	c.Start(appCtx)
 
 	log.Println("Application has shut down.")

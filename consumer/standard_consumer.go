@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/hatsunemiku3939/sqsrouter"
-	"github.com/hatsunemiku3939/sqsrouter/spec"
 )
 
 // --- SQS Consumer Configuration ---
@@ -37,20 +35,20 @@ type SQSClient interface {
 	DeleteMessage(ctx context.Context, params *sqs.DeleteMessageInput, optFns ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 }
 
-// Consumer encapsulates the SQS polling and message processing logic.
-type Consumer struct {
+// StandardConsumer processes messages concurrently for high throughput.
+type StandardConsumer struct {
 	client   SQSClient
 	queueURL string
 	router   *sqsrouter.Router
 }
 
-// NewConsumer creates a new SQS message consumer.
-func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer {
-	return &Consumer{client: client, queueURL: queueURL, router: router}
+// NewStandardConsumer creates a new consumer for standard SQS queues.
+func NewStandardConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) Consumer {
+	return &StandardConsumer{client: client, queueURL: queueURL, router: router}
 }
 
 // Start begins the consumer's polling loop. It blocks until the context is canceled.
-func (c *Consumer) Start(ctx context.Context) {
+func (c *StandardConsumer) Start(ctx context.Context) {
 	log.Printf("🚀 SQS consumer started. Polling queue: %s. Press Ctrl+C to shut down.", c.queueURL)
 
 	var wg sync.WaitGroup
@@ -109,7 +107,7 @@ func (c *Consumer) Start(ctx context.Context) {
 }
 
 // processMessage routes, handles, and deletes a single SQS message.
-func (c *Consumer) processMessage(ctx context.Context, msg *sqstypes.Message) {
+func (c *StandardConsumer) processMessage(ctx context.Context, msg *sqstypes.Message) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.Printf("ERROR: Panic recovered while processing a message: %v", rec)
@@ -158,48 +156,4 @@ func (c *Consumer) processMessage(ctx context.Context, msg *sqstypes.Message) {
 	} else {
 		log.Printf("🔁 RETRYING message ID %s later (visibility timeout will expire).", routed.MessageID)
 	}
-}
-
-// buildMessageContext constructs a spec.MessageContext from an SQS message.
-func buildMessageContext(m *sqstypes.Message) *spec.MessageContext {
-	if m == nil {
-		return &spec.MessageContext{}
-	}
-	mc := &spec.MessageContext{CustomAttributes: map[string]sqstypes.MessageAttributeValue{}}
-	// Copy message attributes directly (safe to range over nil map)
-	for k, v := range m.MessageAttributes {
-		mc.CustomAttributes[k] = v
-	}
-	// Parse system attributes (map lookup on nil map is safe)
-	if v, ok := m.Attributes[string(sqstypes.MessageSystemAttributeNameApproximateReceiveCount)]; ok {
-		if n, err := strconv.Atoi(v); err == nil {
-			mc.ReceiveCount = n
-		}
-	}
-	if v, ok := m.Attributes[string(sqstypes.MessageSystemAttributeNameSentTimestamp)]; ok {
-		if ts, err := parseEpochMillis(v); err == nil {
-			mc.SentTimestamp = ts
-		}
-	}
-	if v, ok := m.Attributes[string(sqstypes.MessageSystemAttributeNameApproximateFirstReceiveTimestamp)]; ok {
-		if ts, err := parseEpochMillis(v); err == nil {
-			mc.FirstReceiveTimestamp = ts
-		}
-	}
-	if v, ok := m.Attributes[string(sqstypes.MessageSystemAttributeNameMessageGroupId)]; ok {
-		mc.MessageGroupID = v
-	}
-	if v, ok := m.Attributes[string(sqstypes.MessageSystemAttributeNameMessageDeduplicationId)]; ok {
-		mc.MessageDeduplicationID = v
-	}
-	return mc
-}
-
-// parseEpochMillis converts a string epoch millis to time.Time.
-func parseEpochMillis(s string) (time.Time, error) {
-	ms, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Unix(0, ms*int64(time.Millisecond)), nil
 }

@@ -97,10 +97,17 @@ func main() {
   router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
   if err != nil { panic(err) }
 
-  c := consumer.NewConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
+  c := consumer.NewStandardConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}", router)
   ctx := context.Background()
   c.Start(ctx) // blocks until ctx is canceled
 }
+```
+
+### FIFO queues (strict ordering)
+```go
+// For FIFO queues, use the sequential consumer to maintain order.
+c := consumer.NewFIFOConsumer(client, "https://sqs.{region}.amazonaws.com/{account}/{queue}.fifo", router)
+c.Start(context.Background())
 ```
 
 ## Usage
@@ -196,7 +203,10 @@ router, _ := sqsrouter.NewRouter(
 ## Project Structure
 ```
 sqsrouter/
-├── consumer/                    # SQS polling and lifecycle (receive/delete, timeouts, concurrency)
+├── consumer/                    # SQS polling and lifecycle (receive/delete, timeouts)
+│   ├── interface.go             # Consumer interface
+│   ├── standard_consumer.go     # Concurrent consumer for standard queues
+│   └── fifo_consumer.go         # Sequential consumer for FIFO queues
 ├── internal/jsonschema/         # JSON schema validation utilities
 ├── policy/
 │   ├── failure/                 # Built-in failure policies (ImmediateDeletePolicy, SQSRedrivePolicy)

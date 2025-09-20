@@ -44,10 +44,11 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
   - func (r *Router) Use(mw ...Middleware)
   - func (r *Router) Route(ctx context.Context, rawMessage []byte) RoutedResult
   - EnvelopeSchema (JSON Schema for envelope)
-- consumer/consumer.go
-  - type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }
-  - func NewConsumer(client SQSClient, queueURL string, router *sqsrouter.Router) *Consumer
-  - func (c *Consumer) Start(ctx context.Context)
+- consumer/
+  - interface.go: `type Consumer interface { Start(ctx context.Context) }`
+  - standard_consumer.go: `type StandardConsumer` + `func NewStandardConsumer(...) Consumer`
+  - fifo_consumer.go: `type FIFOConsumer` + `func NewFIFOConsumer(...) Consumer`
+  - SQS client contract: `type SQSClient interface { ReceiveMessage(...); DeleteMessage(...) }`
 - Failure policy
   - spec.FailureKind / spec.FailureResult / spec.FailurePolicy
   - policy/failure: ImmediateDeletePolicy, SQSRedrivePolicy
@@ -66,10 +67,11 @@ A concise, automation-friendly guide for AI agents and tooling to understand, na
 
 ## Consumer Lifecycle
 - Long polls ReceiveMessage(maxMessages=5, waitTimeSeconds=10).
-- Each message processed in its own goroutine with processingTimeout=30s.
+- StandardConsumer: processes each message in its own goroutine with processingTimeout=30s.
+- FIFOConsumer: processes messages sequentially and stops the batch on first failure (ShouldDelete=false).
 - On RoutedResult.ShouldDelete=true, DeleteMessage with deleteTimeout=5s.
 - On false, message is left for retry (visibility timeout expiry).
-- Graceful shutdown via context cancellation; waits for in-flight messages.
+- Graceful shutdown via context cancellation; Standard waits for in-flight goroutines; FIFO returns after loop.
 
 ## Examples
 - example/basic/main.go: Registers handler and payload schema for "updateUserProfile" v1.0, starts Consumer.

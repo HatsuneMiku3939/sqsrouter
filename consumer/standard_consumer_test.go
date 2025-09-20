@@ -41,19 +41,20 @@ func createSQSMessage(body, receiptHandle string) types.Message {
 	return types.Message{Body: &body, ReceiptHandle: &receiptHandle}
 }
 
-func TestNewConsumer(t *testing.T) {
+func TestNewStandardConsumer(t *testing.T) {
 	mockClient := new(MockSQSClient)
 	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 	require.NoError(t, err)
-	c := NewConsumer(mockClient, "test-queue-url", router)
+	c := NewStandardConsumer(mockClient, "test-queue-url", router)
 
 	assert.NotNil(t, c)
-	assert.Equal(t, "test-queue-url", c.queueURL)
-	assert.Equal(t, mockClient, c.client)
-	assert.Equal(t, router, c.router)
+	sc := c.(*StandardConsumer)
+	assert.Equal(t, "test-queue-url", sc.queueURL)
+	assert.Equal(t, mockClient, sc.client)
+	assert.Equal(t, router, sc.router)
 }
 
-func TestConsumer_processMessage(t *testing.T) {
+func TestStandardConsumer_processMessage(t *testing.T) {
 	queueURL := "test-queue"
 
 	tests := []struct {
@@ -109,7 +110,7 @@ func TestConsumer_processMessage(t *testing.T) {
 			msgType, msgVersion := "test.event", "1.0"
 			router.Register(msgType, msgVersion, tt.handler)
 
-			c := NewConsumer(mockClient, queueURL, router)
+			c := NewStandardConsumer(mockClient, queueURL, router)
 
 			msgBody := fmt.Sprintf(`{
                 "schemaVersion": "1.0", "messageType": "%s", "messageVersion": "%s",
@@ -126,7 +127,7 @@ func TestConsumer_processMessage(t *testing.T) {
 				}
 			}
 
-			c.processMessage(context.Background(), &sqsMsg)
+			c.(*StandardConsumer).processMessage(context.Background(), &sqsMsg)
 
 			mockClient.AssertExpectations(t)
 			if !tt.expectDeleteCall {
@@ -139,16 +140,16 @@ func TestConsumer_processMessage(t *testing.T) {
 		mockClient := new(MockSQSClient)
 		router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
 		require.NoError(t, err)
-		c := NewConsumer(mockClient, queueURL, router)
+		c := NewStandardConsumer(mockClient, queueURL, router)
 
 		sqsMsg := types.Message{Body: nil, ReceiptHandle: new(string)}
-		c.processMessage(context.Background(), &sqsMsg)
+		c.(*StandardConsumer).processMessage(context.Background(), &sqsMsg)
 		// No client calls should be made
 		mockClient.AssertNotCalled(t, "DeleteMessage")
 	})
 }
 
-func TestConsumer_Start(t *testing.T) {
+func TestStandardConsumer_Start(t *testing.T) {
 	queueURL := "test-queue"
 	mockClient := new(MockSQSClient)
 	router, err := sqsrouter.NewRouter(sqsrouter.EnvelopeSchema)
@@ -160,7 +161,7 @@ func TestConsumer_Start(t *testing.T) {
 		return spec.HandlerResult{ShouldDelete: true}
 	})
 
-	c := NewConsumer(mockClient, queueURL, router)
+	c := NewStandardConsumer(mockClient, queueURL, router)
 
 	t.Run("receives and deletes message successfully", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -184,7 +185,7 @@ func TestConsumer_Start(t *testing.T) {
 
 	t.Run("handles receive message error gracefully", func(t *testing.T) {
 		mockClient := new(MockSQSClient) // Reset mock for this test
-		c := NewConsumer(mockClient, queueURL, router)
+		c := NewStandardConsumer(mockClient, queueURL, router)
 		// The consumer sleeps for 2s on error, so context must be longer.
 		ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 		defer cancel()

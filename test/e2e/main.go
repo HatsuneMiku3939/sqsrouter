@@ -184,7 +184,7 @@ func main() {
 
 	router.Register(MsgTypeE2ETest, MsgVersion1_0, E2ETestHandler)
 
-	c := consumer.NewConsumer(sqsClient, queueURL, router)
+	c := consumer.NewStandardConsumer(sqsClient, queueURL, router)
 	c.Start(appCtx)
 
 	log.Println("Application has shut down.")

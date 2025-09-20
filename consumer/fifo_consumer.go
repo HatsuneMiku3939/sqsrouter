@@ -70,10 +70,10 @@ func (c *FIFOConsumer) Start(ctx context.Context) {
 				break
 			}
 			// Per-message timeout
-			msgCtx, cancelMsg := context.WithTimeout(ctx, processingTimeout)
+			msgCtx, cancelMsg := context.WithTimeout(context.Background(), processingTimeout) //nolint:contextcheck
 			// Attach MessageContext built from SQS attributes
 			msgCtx = sqsrouter.WithMessageContext(msgCtx, buildMessageContext(&m))
-			stopBatch = !c.processMessage(msgCtx, &m)
+			stopBatch = !c.processMessage(msgCtx, &m) //nolint:contextcheck
 			cancelMsg()
 		}
 	}
